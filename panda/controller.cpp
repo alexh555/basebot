@@ -30,7 +30,7 @@ enum State {
 
 int main() {
 	// Location of URDF files specifying world and robot information
-	static const string robot_file = string(CS225A_URDF_FOLDER) + "/panda/panda_arm_hand.urdf";
+	static const string robot_file = string(CS225A_URDF_FOLDER) + "/panda/panda_arm_net.urdf";
 
 	// initial state 
 	int state = POSTURE;
@@ -57,7 +57,7 @@ int main() {
 	MatrixXd N_prec = MatrixXd::Identity(dof, dof);
 
 	// arm task
-	const string control_link = "link7";
+	const string control_link = "end-effector";
 	const Vector3d control_point = Vector3d(0, 0, 0.07);
 	Affine3d compliant_frame = Affine3d::Identity();
 	compliant_frame.translation() = control_point;
@@ -69,15 +69,15 @@ int main() {
 	Matrix3d ee_ori;
 
 	// gripper partial joint task 
-	MatrixXd gripper_selection_matrix = MatrixXd::Zero(2, robot->dof());
-	gripper_selection_matrix(0, 7) = 1;
-	gripper_selection_matrix(1, 8) = 1;
-	auto gripper_task = std::make_shared<SaiPrimitives::JointTask>(robot, gripper_selection_matrix);
-	gripper_task->setDynamicDecouplingType(SaiPrimitives::DynamicDecouplingType::IMPEDANCE);
-	double kp_gripper = 5e3;
-	double kv_gripper = 1e2;
-	gripper_task->setGains(kp_gripper, kv_gripper, 0);
-	gripper_task->setGains(kp_gripper, kv_gripper, 0);
+	// MatrixXd gripper_selection_matrix = MatrixXd::Zero(2, robot->dof());
+	// gripper_selection_matrix(0, 7) = 1;
+	// gripper_selection_matrix(1, 8) = 1;
+	// auto gripper_task = std::make_shared<SaiPrimitives::JointTask>(robot, gripper_selection_matrix);
+	// gripper_task->setDynamicDecouplingType(SaiPrimitives::DynamicDecouplingType::IMPEDANCE);
+	// double kp_gripper = 5e3;
+	// double kv_gripper = 1e2;
+	// gripper_task->setGains(kp_gripper, kv_gripper, 0);
+	// gripper_task->setGains(kp_gripper, kv_gripper, 0);
 
 	// joint task
 	auto joint_task = std::make_shared<SaiPrimitives::JointTask>(robot);
@@ -86,7 +86,7 @@ int main() {
 	VectorXd q_desired(dof);
 	q_desired.head(7) << -30.0, -15.0, -15.0, -105.0, 0.0, 90.0, 45.0;
 	q_desired.head(7) *= M_PI / 180.0;
-	q_desired.tail(2) << 0.04, -0.04;
+	//q_desired.tail(2) << 0.04, -0.04;
 	joint_task->setGoalPosition(q_desired);
 
 	// create a loop timer
@@ -113,28 +113,34 @@ int main() {
 			if ((robot->q() - q_desired).norm() < 1e-2) {
 				cout << "Posture To Motion" << endl;
 				pose_task->reInitializeTask();
-				gripper_task->reInitializeTask();
+				//gripper_task->reInitializeTask();
 				joint_task->reInitializeTask();
 
-				ee_pos = robot->position(control_link, control_point);
-				ee_ori = robot->rotation(control_link);
+				//ee_pos = robot->position(control_link, control_point);
+				ee_pos << 0.3, -0.3-0.3*sin(time), 0.6;
+				//ee_ori = robot->rotation(control_link);
+				ee_ori.setIdentity();
 
 				pose_task->setGoalPosition(ee_pos - Vector3d(-0.1, -0.1, 0.1));
 				pose_task->setGoalOrientation(AngleAxisd(M_PI / 6, Vector3d::UnitX()).toRotationMatrix() * ee_ori);
-				gripper_task->setGoalPosition(Vector2d(0.02, -0.02));
+				//gripper_task->setGoalPosition(Vector2d(0.02, -0.02));
 
 				state = MOTION;
 			}
 		} else if (state == MOTION) {
 			// update goal position and orientation
+			ee_pos << 0.3, -0.3-0.3*sin(time), 0.6;
+			pose_task->setGoalPosition(ee_pos - Vector3d(-0.1, -0.1, 0.1));
 
 			// update task model
 			N_prec.setIdentity();
 			pose_task->updateTaskModel(N_prec);
-			gripper_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
-			joint_task->updateTaskModel(gripper_task->getTaskAndPreviousNullspace());
+			//gripper_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
+			//joint_task->updateTaskModel(gripper_task->getTaskAndPreviousNullspace());
+			joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
 
-			command_torques = pose_task->computeTorques() + gripper_task->computeTorques() + joint_task->computeTorques();
+			//command_torques = pose_task->computeTorques() + gripper_task->computeTorques() + joint_task->computeTorques();
+			command_torques = pose_task->computeTorques() + joint_task->computeTorques(); // Remove gripper task for net
 		}
 
 		// execute redis write callback
