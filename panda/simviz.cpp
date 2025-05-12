@@ -25,6 +25,7 @@
 #include "timer/LoopTimer.h"
 #include "logger/Logger.h"
 
+const float THROW_THRESHOLD = 5; //TODO: adjust in lab
 bool fSimulationRunning = true;
 void sighandler(int){fSimulationRunning = false;}
 
@@ -102,6 +103,8 @@ int main() {
 	redis_client.setEigen(JOINT_ANGLES_KEY, robot->q()); 
 	redis_client.setEigen(JOINT_VELOCITIES_KEY, robot->dq()); 
 	redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, 0 * robot->q());
+	redis_client.setEigen(BALL_POS, Vector3d(5.5, 0.0, 0.0));
+	redis_client.setEigen(BALL_VEL, Vector3d::Zero());
 
 	// start simulation thread
 	thread sim_thread(simulation, sim);
@@ -145,14 +148,10 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
     sim->enableGravityCompensation(true);
 	sim->enableJointLimits(robot_name);
 
-	Vector3d init_linear_velocity(-2.0, 0.0, 0.0);  // TODO: adjust as needed
-	// Vector3d init_angular_velocity(0.0, 0.0, 0.0);  // TODO: adjust as needed
-	sim->setObjectVelocity(object_names[0], init_linear_velocity);
-	// sim->setObjectAngularVelocity(object_names[0], init_angular_velocity);
-
 	while (fSimulationRunning) {
 		timer.waitForNextLoop();
 		VectorXd control_torques = redis_client.getEigen(JOINT_TORQUES_COMMANDED_KEY);
+	
 		{
 			lock_guard<mutex> lock(mutex_torques);
 			sim->setJointTorques(robot_name, control_torques + ui_torques);
@@ -165,8 +164,19 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 		{
 			lock_guard<mutex> lock(mutex_update);
 			for (int i = 0; i < n_objects; ++i) {
-				object_poses[i] = sim->getObjectPose(object_names[i]);
-				object_velocities[i] = sim->getObjectVelocity(object_names[i]);
+				if (object_names[i] == "ball") {
+					// update ball position and velocity
+					Eigen::Affine3d ball_pos = Eigen::Affine3d::Identity();
+					ball_pos.translation() = redis_client.getEigen(BALL_POS);
+					Vector3d ball_vel = redis_client.getEigen(BALL_VEL); 
+					object_poses[i] = ball_pos;
+					object_velocities[i] = ball_vel;
+				} else {
+					// update other objects
+					object_poses[i] = sim->getObjectPose(object_names[i]);
+					object_velocities[i] = sim->getObjectVelocity(object_names[i]);
+				}
+				
 			}
 		}
 	}

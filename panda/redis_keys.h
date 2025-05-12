@@ -11,3 +11,6 @@ const std::string CONTROLLER_RUNNING_KEY = "sai::sim::panda::controller";
 
 const std::string GRIPPER_JOINT_ANGLES_KEY = "sai::sim::panda_gripper::sensors::q";
 const std::string GRIPPER_JOINT_VELOCITIES_KEY = "sai::sim::panda_gripper::sensors::dq";
+
+const std::string BALL_POS = "sai::sim::ball::sensors::position";
+const std::string BALL_VEL = "sai::sim::ball::sensors::velocity";
