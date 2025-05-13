@@ -145,13 +145,23 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
     sim->enableGravityCompensation(true);
 	sim->enableJointLimits(robot_name);
 
-	Vector3d init_linear_velocity(-2.0, 0.0, 0.0);  // TODO: adjust as needed
-	// Vector3d init_angular_velocity(0.0, 0.0, 0.0);  // TODO: adjust as needed
-	sim->setObjectVelocity(object_names[0], init_linear_velocity);
-	// sim->setObjectAngularVelocity(object_names[0], init_angular_velocity);
+	// GET ARM TO STARTING POSITION
+	Vector3d velo_to_start(-100.0, 0.0, 0.0); // basically move straight in x
+	Vector3d pos_to_start(3.0, -0.5, 0.5); // So arm will start here
+	redis_client.setEigen(INITIAL_BALL_POS, pos_to_start);
+	redis_client.setEigen(INITIAL_BALL_VELO, velo_to_start);
+
+	long step_count = 0; // For starting ball later
+	bool ball_launched = false;
+
+	// Wait for start
+	std::cout << "Press ENTER to start simulation..." << std::endl;
+	std::cin.ignore();
 
 	while (fSimulationRunning) {
 		timer.waitForNextLoop();
+		step_count++; // To start ball later
+
 		VectorXd control_torques = redis_client.getEigen(JOINT_TORQUES_COMMANDED_KEY);
 		{
 			lock_guard<mutex> lock(mutex_torques);
@@ -161,6 +171,36 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
         redis_client.setEigen(JOINT_ANGLES_KEY, sim->getJointPositions(robot_name));
         redis_client.setEigen(JOINT_VELOCITIES_KEY, sim->getJointVelocities(robot_name));
 
+		// Launch ball after 2 seconds
+		if(!ball_launched && step_count > (2*sim_freq))
+		{
+			// NOW, create ball
+			std::random_device rd;            // Setup random
+			std::mt19937 gen(rd());           // random number engine
+			std::uniform_real_distribution<> dis(0.0, 0.1);  // range [0.0, 0.4] 
+
+			float y_rand_offset = -5*dis(gen);
+			float z_rand_offset = 4*dis(gen);
+			float v_y_offset = 4*dis(gen);
+			float v_z_offset = 2*dis(gen);
+
+			Vector3d init_linear_velocity(-10.0, -0.2 + v_y_offset, 0.9 + v_z_offset);  // TODO: adjust as needed
+			Affine3d init_ball_pose = Eigen::Affine3d::Identity();
+			init_ball_pose.translation() = Eigen::Vector3d(5.0, -0.25 + y_rand_offset, 0.9 + z_rand_offset);
+
+			sim->setObjectVelocity(object_names[0], init_linear_velocity);
+			sim->setObjectPose(object_names[0], init_ball_pose);
+			// sim->setObjectAngularVelocity(object_names[0], init_angular_velocity);
+
+			// POST INITIAL BALL STATE
+			redis_client.setEigen(INITIAL_BALL_POS, init_ball_pose.translation());
+			redis_client.setEigen(INITIAL_BALL_VELO, init_linear_velocity);
+
+			cout << "Init ball position = " << init_ball_pose.translation() << endl;
+			ball_launched = true; // Don't repeat
+		}
+
+
 		// update object information 
 		{
 			lock_guard<mutex> lock(mutex_update);
@@ -168,6 +208,10 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 				object_poses[i] = sim->getObjectPose(object_names[i]);
 				object_velocities[i] = sim->getObjectVelocity(object_names[i]);
 			}
+
+			// Print object info
+			// Vector3d ball_pos_to_print = object_poses[0].translation();
+			// cout << "Ball pos = " << ball_pos_to_print.transpose() << endl;
 		}
 	}
 	timer.stop();

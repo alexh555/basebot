@@ -12,7 +12,7 @@
 	    <visual>
 	        <origin xyz="0.0 0.0 -0.00635" rpy="0 0 0" />
 	        <geometry>
-				<box size="5 5 0.0127" />
+				<box size="10 10 0.0127" />
 	        </geometry>
 	        <material name="material">
 		        <color rgba="0.1 0.1 0.1 1.0" />
@@ -95,9 +95,9 @@
 	</light>
 
 	<camera name="camera_fixed">
-		<position xyz="0 -2 2.5" />
+		<position xyz="3.0 -0.5 1.0" />
 		<vertical xyz="0.0 0.0 1.0" />
-		<lookat xyz="0 0 0.5" />
+		<lookat xyz="0 -0.5 0.5" />
 	</camera>
 
 </world>

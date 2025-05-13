@@ -23,17 +23,18 @@ void sighandler(int){runloop = false;}
 #include "redis_keys.h"
 
 // States 
-enum State {
-	POSTURE = 0, 
-	MOTION
-};
+// enum State {
+// 	POSTURE = 0, 
+// 	MOTION
+// };
+// Python runs state machine now
 
 int main() {
 	// Location of URDF files specifying world and robot information
 	static const string robot_file = string(CS225A_URDF_FOLDER) + "/panda/panda_arm_net.urdf";
 
 	// initial state 
-	int state = POSTURE;
+	// int state = POSTURE;
 	string controller_status = "1";
 	
 	// start redis client
@@ -58,12 +59,14 @@ int main() {
 
 	// arm task
 	const string control_link = "end-effector";
-	const Vector3d control_point = Vector3d(0, 0, 0.07);
+	const Vector3d control_point = Vector3d(0, 0, 0.17);
 	Affine3d compliant_frame = Affine3d::Identity();
 	compliant_frame.translation() = control_point;
 	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
 	pose_task->setPosControlGains(400, 40, 0);
 	pose_task->setOriControlGains(400, 40, 0);
+	pose_task->disableVelocitySaturation();
+	pose_task->disableInternalOtg();
 
 	Vector3d ee_pos;
 	Matrix3d ee_ori;
@@ -94,6 +97,10 @@ int main() {
 	double control_freq = 1000;
 	SaiCommon::LoopTimer timer(control_freq, 1e6);
 
+	// Ensure pose task initialized
+	pose_task->reInitializeTask();
+	cout << "Initialized pose_task" << endl;
+
 	while (runloop) {
 		timer.waitForNextLoop();
 		const double time = timer.elapsedSimTime();
@@ -102,48 +109,32 @@ int main() {
 		robot->setQ(redis_client.getEigen(JOINT_ANGLES_KEY));
 		robot->setDq(redis_client.getEigen(JOINT_VELOCITIES_KEY));
 		robot->updateModel();
-	
-		if (state == POSTURE) {
-			// update task model 
-			N_prec.setIdentity();
-			joint_task->updateTaskModel(N_prec);
 
-			command_torques = joint_task->computeTorques();
+		// Read goal from Python, if available
+		if(redis_client.exists(CATCHING_POS) && redis_client.exists(CATCHING_ORI)) {
 
-			if ((robot->q() - q_desired).norm() < 1e-2) {
-				cout << "Posture To Motion" << endl;
-				pose_task->reInitializeTask();
-				//gripper_task->reInitializeTask();
-				joint_task->reInitializeTask();
+			// Update goals
+			ee_pos = redis_client.getEigen(CATCHING_POS);
+			ee_ori = redis_client.getEigen(CATCHING_ORI);
 
-				//ee_pos = robot->position(control_link, control_point);
-				ee_pos << 0.3, -0.3-0.3*sin(time), 0.6;
-				//ee_ori = robot->rotation(control_link);
-				ee_ori.setIdentity();
+			// Update torques
+			pose_task->setGoalPosition(ee_pos);
+			pose_task->setGoalOrientation(ee_ori);
 
-				pose_task->setGoalPosition(ee_pos - Vector3d(-0.1, -0.1, 0.1));
-				pose_task->setGoalOrientation(AngleAxisd(M_PI / 6, Vector3d::UnitX()).toRotationMatrix() * ee_ori);
-				//gripper_task->setGoalPosition(Vector2d(0.02, -0.02));
-
-				state = MOTION;
-			}
-		} else if (state == MOTION) {
-			// update goal position and orientation
-			ee_pos << 0.3, -0.3-0.3*sin(time), 0.6;
-			pose_task->setGoalPosition(ee_pos - Vector3d(-0.1, -0.1, 0.1));
-
-			// update task model
-			N_prec.setIdentity();
+			// Command torques
+			N_prec.setIdentity(); // update task model
 			pose_task->updateTaskModel(N_prec);
-			//gripper_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
-			//joint_task->updateTaskModel(gripper_task->getTaskAndPreviousNullspace());
 			joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
+			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
-			//command_torques = pose_task->computeTorques() + gripper_task->computeTorques() + joint_task->computeTorques();
-			command_torques = pose_task->computeTorques() + joint_task->computeTorques(); // Remove gripper task for net
+			cout << command_torques.transpose() << endl;
+		} else {
+			// No goal, stay at zero
+			cout << "NO GOAL" << endl;
+			command_torques = VectorXd::Zero(dof);
+
 		}
-
-		cout << command_torques.transpose() << endl;
+		
 
 		// execute redis write callback
 		redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, command_torques);
