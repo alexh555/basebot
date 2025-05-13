@@ -934,6 +934,7 @@ class NatNetClient:
             data_dict[ "skeleton_count"] =skeleton_count
             data_dict[ "asset_count"] =asset_count
             data_dict[ "labeled_marker_count"] = labeled_marker_count
+            data_dict[ "labeled_marker_data"] = labeled_marker_data
             data_dict[ "timecode"] = timecode
             data_dict[ "timecode_sub"] = timecode_sub
             data_dict[ "timestamp"] = timestamp

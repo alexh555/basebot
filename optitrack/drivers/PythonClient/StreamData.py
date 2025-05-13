@@ -36,13 +36,16 @@ def signal_handler(sig, frame):
 # Globals
 RIGID_BODY_POS_KEY = "sai2::optitrack::rigid_body_pos::"
 RIGID_BODY_ORI_KEY = "sai2::optitrack::rigid_body_ori::"
+SINGLE_PONT_POS_KEY = "sai2::optitrack::single_point_pos"
+
 redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
 # This is a callback function that gets connected to the NatNet client
 # and called once per mocap frame.
 def receive_new_frame(data_dict):
     order_list=[ "frameNumber", "markerSetCount", "unlabeledMarkersCount", "rigidBodyCount", "skeletonCount",
-                "labeledMarkerCount", "timecode", "timecodeSub", "timestamp", "isRecording", "trackedModelsChanged" ]
+                "labeledMarkerCount", "labeled_marker_data" "timecode", "timecodeSub", "timestamp", "isRecording", 
+                "trackedModelsChanged" ]
     dump_args = False
     if dump_args == True:
         out_string = "    "
@@ -52,6 +55,9 @@ def receive_new_frame(data_dict):
                 out_string += data_dict[key] + " "
             out_string+="/"
         print(out_string)
+        if key == "labeled_marker_data":
+            print("labeled_marker_data", data_dict[key])
+            # redis_client.set(SINGLE_PONT_POS_KEY, data_dict[key]) #TODO - figure out how to parse
 
 # This is a callback function that gets connected to the NatNet client. It is called once per rigid body per frame
 def receive_rigid_body_frame( new_id, position, rotation ):
