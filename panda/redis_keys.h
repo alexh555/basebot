@@ -17,3 +17,8 @@ const std::string INITIAL_BALL_POS = "sai::sim::ball::initial::position";
 const std::string INITIAL_BALL_VELO = "sai::sim::ball::initial::velocity";
 const std::string CATCHING_POS = "sai::sim::panda::catching::position";
 const std::string CATCHING_ORI = "sai::sim::panda::catching::orientation";
+
+const std::string ROBOT_EE_POS = "sai::controllers::Panda::cartesian_controller::cartesian_task::current_position";
+const std::string ROBOT_EE_ORI = "sai::controllers::Panda::cartesian_controller::cartesian_task::current_orientation";
+
+const std::string TRUE_BALL_POS = "sai2::optitrack::rigid_body_pos::4";

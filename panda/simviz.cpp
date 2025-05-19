@@ -209,9 +209,14 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 				object_velocities[i] = sim->getObjectVelocity(object_names[i]);
 			}
 
-			// Print object info
-			// Vector3d ball_pos_to_print = object_poses[0].translation();
-			// cout << "Ball pos = " << ball_pos_to_print.transpose() << endl;
+			// Post ball info, if launched
+			if (ball_launched)
+			{
+				Vector3d ball_pos_to_print = object_poses[0].translation();
+				// cout << "Ball pos = " << ball_pos_to_print.transpose() << endl;
+				redis_client.setEigen(TRUE_BALL_POS, ball_pos_to_print);
+			}
+			
 		}
 	}
 	timer.stop();

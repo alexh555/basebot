@@ -127,118 +127,119 @@ def velo_to_ori(velocity_vec):
     R_des = np.column_stack([x_des, y_des, z_des])
     return R_des
 
-# ***Redis, config, and controller name init - SKIPPED b/c shouldnt be necessary ***
-redis_keys = RedisKeys()
+if __name__ == "__main__":
+    # ***Redis, config, and controller name init - SKIPPED b/c shouldnt be necessary ***
+    redis_keys = RedisKeys()
 
-#config_file_for_this_example = "single_panda.xml"
-#controller_to_use = "cartesian_controller"
+    #config_file_for_this_example = "single_panda.xml"
+    #controller_to_use = "cartesian_controller"
 
-#place_goal_position_left = np.array([0.4, -0.3, 0.225])
-#place_goal_position_right = np.array([0.45, 0.35, 0.325])
+    #place_goal_position_left = np.array([0.4, -0.3, 0.225])
+    #place_goal_position_right = np.array([0.45, 0.35, 0.325])
 
-# redis client
-redis_client = redis.Redis()
+    # redis client
+    redis_client = redis.Redis()
 
-# # check that the config file is correct
-# config_file_name = redis_client.get(redis_keys.config_file_name).decode("utf-8")
-# if config_file_name != config_file_for_this_example:
-#   print("This example is meant to be used with the config file: ", config_file_for_this_example)
-#   exit(0)
+    # # check that the config file is correct
+    # config_file_name = redis_client.get(redis_keys.config_file_name).decode("utf-8")
+    # if config_file_name != config_file_for_this_example:
+    #   print("This example is meant to be used with the config file: ", config_file_for_this_example)
+    #   exit(0)
 
-# # set the correct active controller
-# while redis_client.get(redis_keys.active_controller).decode("utf-8") != controller_to_use:
-# 	redis_client.set(redis_keys.active_controller, controller_to_use)
-   
-# Initialize loop at 100 Hz
-loop_time = 0.0
-dt = 0.01
-internal_step = 0
-state = State.INIT
-
-time.sleep(0.01)
-init_time = time.perf_counter_ns() * 1e-9
-
-time_start = 0
-
-# Position initializations
-init_position = np.array([0.1, -0.40, 0.5]) # Where to go at start
-init_orientation = np.array([[1.0,0,0],[0,-1.0,0],[0,0,-1.0]])
-
-goal_position = init_position # Set as where to start
-goal_orientation = init_orientation
-
-current_ball_position = np.array([0.0, 0.0, 0.0])
-current_ball_velocity = np.array([0.0, 0.0, 0.0])
-last_ball_position = current_ball_position
-last_ball_velocity = current_ball_velocity
-
-# *** MAIN LOOP ***
-try:
-  while True:
-    loop_time += dt
-    time.sleep(max(0, loop_time - (time.perf_counter_ns() * 1e-9 - init_time)))
+    # # set the correct active controller
+    # while redis_client.get(redis_keys.active_controller).decode("utf-8") != controller_to_use:
+    # 	redis_client.set(redis_keys.active_controller, controller_to_use)
     
-    # check the active controller is the cartesian one - SKIPPED
-    # active_controller = redis_client.get(redis_keys.active_controller).decode("utf-8")
-    # if active_controller != "cartesian_controller":
-    #     print("Exiting, active controller is not cartesian_controller")
-    #     exit(0)
-    
-    # read robot state - SKIPPED
-    # current_position = np.array(json.loads(redis_client.get(redis_keys.cartesian_task_current_position)))
-    # current_orientation = np.array(json.loads(redis_client.get(redis_keys.cartesian_task_current_orientation)))
+    # Initialize loop at 100 Hz
+    loop_time = 0.0
+    dt = 0.01
+    internal_step = 0
+    state = State.INIT
 
-    # Error - SKIPPED
-    #print(current_position)
-    # pos_error = np.linalg.norm(goal_position - current_position)
-    # ori_error = np.linalg.norm(goal_orientation - current_orientation)
+    time.sleep(0.01)
+    init_time = time.perf_counter_ns() * 1e-9
 
-    # state machine
-    # if state == State.INIT:
-      
-    # Command initial position
-    redis_client.set(redis_keys.catching_position, json.dumps(goal_position.tolist()))
-    redis_client.set(redis_keys.catching_orientation, json.dumps(goal_orientation.tolist()))
+    time_start = 0
 
-    # Determine if ball trajectory available
-    # FOR HARDWARE, THIS IF SHOULD BE BASED ON OPTITRACK
-    # Also, should prob use state machine
-    if( redis_client.exists(redis_keys.initial_ball_position) and redis_client.exists(redis_keys.initial_ball_velocity) ):
-    
-        # Read in init ball 
-        bpos_str = redis_client.get(redis_keys.initial_ball_position).decode("utf-8")
-        bvel_str = redis_client.get(redis_keys.initial_ball_velocity).decode("utf-8")
+    # Position initializations
+    init_position = np.array([0.1, -0.40, 0.5]) # Where to go at start
+    init_orientation = np.array([[1.0,0,0],[0,-1.0,0],[0,0,-1.0]])
 
-        current_ball_position = np.array([float(p) for p in bpos_str.strip("[]").split(",")])  # Initial position (m)
-        current_ball_velocity = np.array([float(v) for v in bvel_str.strip("[]").split(",")])   # Initial velocity (m/s)
+    goal_position = init_position # Set as where to start
+    goal_orientation = init_orientation
 
-        # print("Got ball info!")
-        # print(current_ball_position)
-        # print(current_ball_velocity)
-        # print(type(current_ball_position))
-        # print(type(current_ball_velocity))
+    current_ball_position = np.array([0.0, 0.0, 0.0])
+    current_ball_velocity = np.array([0.0, 0.0, 0.0])
+    last_ball_position = current_ball_position
+    last_ball_velocity = current_ball_velocity
 
-        # ***SIMULATE ENDING POSITION***
-        if not np.allclose(current_ball_position, last_ball_position): # Only sim and update on change
-            goal_position, goal_orientation = get_catch_point(current_ball_position, current_ball_velocity)
-            print(f"NEW GOAL POS: {goal_position}")
-            print(f"NEW GOAL ORI: {goal_orientation}")
+    # *** MAIN LOOP ***
+    try:
+        while True:
+            loop_time += dt
+            time.sleep(max(0, loop_time - (time.perf_counter_ns() * 1e-9 - init_time)))
+            
+            # check the active controller is the cartesian one - SKIPPED
+            # active_controller = redis_client.get(redis_keys.active_controller).decode("utf-8")
+            # if active_controller != "cartesian_controller":
+            #     print("Exiting, active controller is not cartesian_controller")
+            #     exit(0)
+            
+            # read robot state - SKIPPED
+            # current_position = np.array(json.loads(redis_client.get(redis_keys.cartesian_task_current_position)))
+            # current_orientation = np.array(json.loads(redis_client.get(redis_keys.cartesian_task_current_orientation)))
 
-        # State transition
-        #state = State.CATCH
-        # DON'T TRANSITION, BC WANT TO KEEP READING. Instead, update prior to check for change
-        last_ball_position = current_ball_position
-        last_ball_velocity = current_ball_velocity
+            # Error - SKIPPED
+            #print(current_position)
+            # pos_error = np.linalg.norm(goal_position - current_position)
+            # ori_error = np.linalg.norm(goal_orientation - current_orientation)
 
-    # elif state == State.CATCH:
+            # state machine
+            # if state == State.INIT:
+            
+            # Command initial position
+            redis_client.set(redis_keys.catching_position, json.dumps(goal_position.tolist()))
+            redis_client.set(redis_keys.catching_orientation, json.dumps(goal_orientation.tolist()))
 
-    #     # Just continually command catch position
-    #     redis_client.set(redis_keys.catching_position, json.dumps(goal_position.tolist()))
-    #     redis_client.set(redis_keys.catching_orientation, json.dumps(goal_orientation.tolist()))
+            # Determine if ball trajectory available
+            # FOR HARDWARE, THIS IF SHOULD BE BASED ON OPTITRACK
+            # Also, should prob use state machine
+            if( redis_client.exists(redis_keys.initial_ball_position) and redis_client.exists(redis_keys.initial_ball_velocity) ):
+            
+                # Read in init ball 
+                bpos_str = redis_client.get(redis_keys.initial_ball_position).decode("utf-8")
+                bvel_str = redis_client.get(redis_keys.initial_ball_velocity).decode("utf-8")
 
-except KeyboardInterrupt:
-  print("Keyboard interrupt")
-  pass
-except Exception as e:
-  print(e)
-  pass
+                current_ball_position = np.array([float(p) for p in bpos_str.strip("[]").split(",")])  # Initial position (m)
+                current_ball_velocity = np.array([float(v) for v in bvel_str.strip("[]").split(",")])   # Initial velocity (m/s)
+
+                # print("Got ball info!")
+                # print(current_ball_position)
+                # print(current_ball_velocity)
+                # print(type(current_ball_position))
+                # print(type(current_ball_velocity))
+
+                # ***SIMULATE ENDING POSITION***
+                if not np.allclose(current_ball_position, last_ball_position): # Only sim and update on change
+                    goal_position, goal_orientation = get_catch_point(current_ball_position, current_ball_velocity)
+                    print(f"NEW GOAL POS: {goal_position}")
+                    print(f"NEW GOAL ORI: {goal_orientation}")
+
+                # State transition
+                #state = State.CATCH
+                # DON'T TRANSITION, BC WANT TO KEEP READING. Instead, update prior to check for change
+                last_ball_position = current_ball_position
+                last_ball_velocity = current_ball_velocity
+
+            # elif state == State.CATCH:
+
+            #     # Just continually command catch position
+            #     redis_client.set(redis_keys.catching_position, json.dumps(goal_position.tolist()))
+            #     redis_client.set(redis_keys.catching_orientation, json.dumps(goal_orientation.tolist()))
+
+    except KeyboardInterrupt:
+        print("Keyboard interrupt")
+        pass
+    except Exception as e:
+        print(e)
+        pass

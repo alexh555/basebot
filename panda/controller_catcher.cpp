@@ -138,6 +138,13 @@ int main() {
 
 		// execute redis write callback
 		redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, command_torques);
+
+		// Also share robot position
+		redis_client.setEigen(ROBOT_EE_POS, robot->position(control_link, control_point));
+
+		Matrix3d rot_in_link;
+        rot_in_link << 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0;
+		redis_client.setEigen(ROBOT_EE_ORI, robot->rotation(control_link, rot_in_link));
 	}
 
 	timer.stop();
