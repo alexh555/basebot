@@ -446,7 +446,24 @@ try:
            state = State.FINISH # If so, stop
     
     elif state == State.FINISH:
-        input("Press enter to reset: ") # Go back to initial
+
+        # Wait until ball returns to start, then return to finish
+        # if( redis_client.exists(redis_keys.ball_position) ):
+
+        #     # Read in init ball 
+        #     bpos_str = redis_client.get(redis_keys.ball_position).decode("utf-8")
+        #     orig_ball_pos = np.array([float(p) for p in bpos_str.strip("[]").split(",")])  # Initial position (m)
+            
+        #     current_ball_position = transform_Optitrack2Sim(orig_ball_pos)
+
+        #     if (current_ball_position[0] > CUTOFF_INITIAL):
+        #         goal_position = init_position
+        #         goal_orientation = init_orientation
+
+        #         state = State.INIT
+
+        # Go back to initial
+        input("Press enter to reset: ") 
         goal_position = init_position
         goal_orientation = init_orientation
 
