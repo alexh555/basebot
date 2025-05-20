@@ -67,6 +67,8 @@ def receive_rigid_body_frame( new_id, position, rotation ):
     print('[' + str(position)[1:-1] + ']')
     # print( "Received frame for rigid body", new_id," ",position," ",rotation )
 
+    # FIT TO SIM
+
 def add_lists(totals, totals_tmp):
     totals[0]+=totals_tmp[0]
     totals[1]+=totals_tmp[1]

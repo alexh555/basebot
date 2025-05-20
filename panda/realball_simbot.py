@@ -13,7 +13,7 @@ from filterpy.kalman import KalmanFilter
 
 DEG_TO_RAD = math.pi / 180.0
 NUM_POINTS_EST = 3
-CUTOFF_INITIAL = 6.0
+CUTOFF_INITIAL = 2.6
 
 init_position = np.array([0.1, -0.50, 0.5]) # Where to put net center at start
 init_orientation = np.array([[1.0,0,0],[0,-1.0,0],[0,0,-1.0]])
@@ -25,6 +25,22 @@ class State(Enum):
   FINISH = auto()
 
 """ HELPER FUNCTIONS """
+def transform_Optitrack2Sim(position):
+    """
+    Transform Optitrack room coords to those making sense in simulator
+    """
+
+    # FIT TO SIM
+    position = list(position)
+    orig_pos = position.copy()
+    position[0] = orig_pos[2] + 5
+    position[1] = orig_pos[0] - 0.75
+    position[2] = orig_pos[1] - 0.4
+    position = np.array(position)
+   
+    return position
+   
+
 def velocity_polyfit(times, positions, t_eval=None):
     """
     Fits a 2nd-order polynomial to position vs time, returns velocity at t_eval.
@@ -161,7 +177,12 @@ def velo_to_ori(velocity_vec):
     Computes robot orientation given catch point velocity of ball
     """
 
-    x_des = -velocity_vec / np.linalg.norm(velocity_vec) # Desired x axis should be anti-parallel to velocity
+    # Safeguard against divide by 0
+    if (np.linalg.norm(velocity_vec) > 1e-6):
+       
+        x_des = -velocity_vec / np.linalg.norm(velocity_vec) # Desired x axis should be anti-parallel to velocity
+    else:
+       x_des = np.array([1.0, 0.0, 0.0]) # Default to initial orientation
 
     # Calc Z - try to get close to [0, 0, -1]
     y_bias = np.array([0, -1, 0])
@@ -297,16 +318,18 @@ try:
 
             # Read in init ball 
             bpos_str = redis_client.get(redis_keys.ball_position).decode("utf-8")
-            current_ball_position = np.array([float(p) for p in bpos_str.strip("[]").split(",")])  # Initial position (m)
+            orig_ball_pos = np.array([float(p) for p in bpos_str.strip("[]").split(",")])  # Initial position (m)
             
+            current_ball_position = transform_Optitrack2Sim(orig_ball_pos)
+
             print(f"Current ball position = {current_ball_position}")
             
             # CHECK INITIAL POS CUTOFF
             if (current_ball_position[0] < CUTOFF_INITIAL):
 
                 # Check if ball past catchable position
-                if (current_ball_position[0] < -0.05):
-                    state = State.CATCH # Stop updating, just move to catch position and stop
+                if (current_ball_position[0] < 0):
+                    state = State.FINISH # Stop updating, just move to catch position and stop
                 else:
 
                     """ KALMAN APPROACH """
@@ -423,7 +446,10 @@ try:
            state = State.FINISH # If so, stop
     
     elif state == State.FINISH:
-        input("Press enter to reset: ") # For now, stay here permanently
+        input("Press enter to reset: ") # Go back to initial
+        goal_position = init_position
+        goal_orientation = init_orientation
+
         state = State.INIT
 
 

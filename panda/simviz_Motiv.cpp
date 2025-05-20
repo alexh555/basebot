@@ -130,6 +130,20 @@ int main() {
 }
 
 //------------------------------------------------------------------------------
+// Helper for transforming ball position
+static Vector3d transform_ball_pos(Vector3d pos_from_redis)
+{
+	Vector3d orig_pos = pos_from_redis;
+	Vector3d transf_pos = orig_pos;
+
+    transf_pos[0] = orig_pos[2] + 5;
+    transf_pos[1] = orig_pos[0] - 0.75;
+    transf_pos[2] = orig_pos[1] - 0.4;
+	
+	return transf_pos;
+}
+
+// Simulator
 void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 	// fSimulationRunning = true;
 
@@ -172,50 +186,65 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
         redis_client.setEigen(JOINT_VELOCITIES_KEY, sim->getJointVelocities(robot_name));
 
 		// Launch ball after 2 seconds
-		if(!ball_launched && step_count > (2*sim_freq))
-		{
-			// NOW, create ball
-			std::random_device rd;            // Setup random
-			std::mt19937 gen(rd());           // random number engine
-			std::uniform_real_distribution<> dis(0.0, 0.1);  // range [0.0, 0.4] 
+		// if(!ball_launched && step_count > (2*sim_freq))
+		// {
+		// 	// NOW, create ball
+		// 	std::random_device rd;            // Setup random
+		// 	std::mt19937 gen(rd());           // random number engine
+		// 	std::uniform_real_distribution<> dis(0.0, 0.1);  // range [0.0, 0.4] 
 
-			float y_rand_offset = -5*dis(gen);
-			float z_rand_offset = 4*dis(gen);
-			float v_y_offset = 4*dis(gen);
-			float v_z_offset = 2*dis(gen);
+		// 	float y_rand_offset = -5*dis(gen);
+		// 	float z_rand_offset = 4*dis(gen);
+		// 	float v_y_offset = 4*dis(gen);
+		// 	float v_z_offset = 2*dis(gen);
 
-			Vector3d init_linear_velocity(-10.0, -0.2 + v_y_offset, 0.9 + v_z_offset);  // TODO: adjust as needed
-			Affine3d init_ball_pose = Eigen::Affine3d::Identity();
-			init_ball_pose.translation() = Eigen::Vector3d(5.0, -0.25 + y_rand_offset, 0.9 + z_rand_offset);
+		// 	Vector3d init_linear_velocity(-10.0, -0.2 + v_y_offset, 0.9 + v_z_offset);  // TODO: adjust as needed
+		// 	Affine3d init_ball_pose = Eigen::Affine3d::Identity();
+		// 	init_ball_pose.translation() = Eigen::Vector3d(5.0, -0.25 + y_rand_offset, 0.9 + z_rand_offset);
 
-			sim->setObjectVelocity(object_names[0], init_linear_velocity);
-			sim->setObjectPose(object_names[0], init_ball_pose);
-			// sim->setObjectAngularVelocity(object_names[0], init_angular_velocity);
+		// 	sim->setObjectVelocity(object_names[0], init_linear_velocity);
+		// 	sim->setObjectPose(object_names[0], init_ball_pose);
+		// 	// sim->setObjectAngularVelocity(object_names[0], init_angular_velocity);
 
-			// POST INITIAL BALL STATE
-			redis_client.setEigen(INITIAL_BALL_POS, init_ball_pose.translation());
-			redis_client.setEigen(INITIAL_BALL_VELO, init_linear_velocity);
+		// 	// POST INITIAL BALL STATE
+		// 	redis_client.setEigen(INITIAL_BALL_POS, init_ball_pose.translation());
+		// 	redis_client.setEigen(INITIAL_BALL_VELO, init_linear_velocity);
 
-			cout << "Init ball position = " << init_ball_pose.translation() << endl;
-			ball_launched = true; // Don't repeat
-		}
+		// 	cout << "Init ball position = " << init_ball_pose.translation() << endl;
+		// 	ball_launched = true; // Don't repeat
+		// }
 
 
-		// update object information 
+		// update object information USING OPTITRACK
 		{
 			lock_guard<mutex> lock(mutex_update);
 			for (int i = 0; i < n_objects; ++i) {
-				object_poses[i] = sim->getObjectPose(object_names[i]);
-				object_velocities[i] = sim->getObjectVelocity(object_names[i]);
+				// object_poses[i] = sim->getObjectPose(object_names[i]);
+				// object_velocities[i] = sim->getObjectVelocity(object_names[i]);
+
+				if (redis_client.exists(TRUE_BALL_POS)) {
+					Vector3d ball_pos_to_print = redis_client.getEigen(TRUE_BALL_POS);  // ← replace with correct Redis key
+					ball_pos_to_print = transform_ball_pos(ball_pos_to_print);
+					object_poses[i].translation() = ball_pos_to_print;
+					// Optionally zero the orientation:
+					object_poses[i].linear() = Matrix3d::Identity();
+
+					cout << "Ball pos = " << ball_pos_to_print.transpose() << endl;
+
+				} else {
+					cout << "BALL ERROR" << endl;
+				}
+
+				
 			}
 
 			// Post ball info, if launched
-			if (ball_launched)
-			{
-				Vector3d ball_pos_to_print = object_poses[0].translation();
-				// cout << "Ball pos = " << ball_pos_to_print.transpose() << endl;
-				//redis_client.setEigen(TRUE_BALL_POS, ball_pos_to_print);
-			}
+			// if (ball_launched)
+			// {
+			// 	Vector3d ball_pos_to_print = object_poses[0].translation();
+			// 	// cout << "Ball pos = " << ball_pos_to_print.transpose() << endl;
+			// 	//redis_client.setEigen(TRUE_BALL_POS, ball_pos_to_print);
+			// }
 			
 		}
 	}
