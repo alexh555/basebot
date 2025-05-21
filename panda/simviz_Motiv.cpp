@@ -136,9 +136,15 @@ static Vector3d transform_ball_pos(Vector3d pos_from_redis)
 	Vector3d orig_pos = pos_from_redis;
 	Vector3d transf_pos = orig_pos;
 
-    transf_pos[0] = orig_pos[2] + 5 - 0.5; // Remove second term to to align with blue X
-    transf_pos[1] = orig_pos[0] - 0.75; //- 0.7; // Remove second term to to align with blue X
-    transf_pos[2] = orig_pos[1] - 0.4;
+	// VERSION 1
+    // transf_pos[0] = orig_pos[2] + 5 - 0.5; // Remove second term to to align with blue X
+    // transf_pos[1] = orig_pos[0] - 0.75; //- 0.7; // Remove second term to to align with blue X
+    // transf_pos[2] = orig_pos[1] - 0.4;
+
+	// V2 - Someone changed origin
+	transf_pos[0] = -orig_pos[1] + 5 - 0.5; //
+    transf_pos[1] = orig_pos[0]; //
+    transf_pos[2] = orig_pos[2] - 0.4;
 	
 	return transf_pos;
 }

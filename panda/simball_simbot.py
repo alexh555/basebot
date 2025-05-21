@@ -381,6 +381,7 @@ try:
                        print(f"VELOCITY ESTIMATE = {current_ball_velocity}")
 
                        # Generate resulting catch point
+                       # ONLY GET CATCH POINT AND UPDATE PREVIOUS IF NON-ZERO VELOCITY (diff in pos)
                        new_position, new_orientation, new_flag = get_catch_point(current_ball_position, current_ball_velocity)
                        goal_position = new_position
                        goal_orientation = new_orientation

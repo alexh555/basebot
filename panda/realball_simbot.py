@@ -30,12 +30,20 @@ def transform_Optitrack2Sim(position):
     Transform Optitrack room coords to those making sense in simulator
     """
 
-    # FIT TO SIM
+    # FIT TO SIM - ORIGINAL
+    # position = list(position)
+    # orig_pos = position.copy()
+    # position[0] = orig_pos[2] + 5 - 0.5 # Remove second term to to align with blue X
+    # position[1] = orig_pos[0] - 0.75 #- 0.7 # Remove second term to to align with blue X
+    # position[2] = orig_pos[1] - 0.4
+    # position = np.array(position)
+
+    # FIT TO SIM - Someone redefined the origin
     position = list(position)
     orig_pos = position.copy()
-    position[0] = orig_pos[2] + 5 - 0.5 # Remove second term to to align with blue X
-    position[1] = orig_pos[0] - 0.75 #- 0.7 # Remove second term to to align with blue X
-    position[2] = orig_pos[1] - 0.4
+    position[0] = -orig_pos[1] + 5 - 0.5 # Remove second term to to align with blue X
+    position[1] = orig_pos[0] #- 0.7 # Remove second term to to align with blue X
+    position[2] = orig_pos[2] - 0.4
     position = np.array(position)
    
     return position
@@ -379,14 +387,16 @@ try:
                        print(f"VELOCITY ESTIMATE = {current_ball_velocity}")
 
                        # Generate resulting catch point
-                       new_position, new_orientation, new_flag = get_catch_point(current_ball_position, current_ball_velocity)
-                       goal_position = new_position
-                       goal_orientation = new_orientation
-                       print(f"NEW GOAL POS: {goal_position}")
-
-                        # Update for next estimate
-                       t_prev = t_next
-                       pos_prev = current_ball_position
+                       # ONLY GET CATCH POINT AND UPDATE PREVIOUS IF NON-ZERO VELOCITY (diff in pos)
+                       if (np.linalg.norm(current_ball_velocity) > 1e-6):
+                          new_position, new_orientation, new_flag = get_catch_point(current_ball_position, current_ball_velocity)
+                          goal_position = new_position
+                          goal_orientation = new_orientation
+                          print(f"NEW GOAL POS: {goal_position}")
+                          
+                          # Update for next estimate
+                          t_prev = t_next
+                          pos_prev = current_ball_position
                     
                     """ POLYFIT APPROACH """
                     # if firstFlag:
