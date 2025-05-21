@@ -318,8 +318,9 @@ try:
         print("Moved to INIT position")
 
         #redis_client.delete(redis_keys.ball_position) # Clear the ball redis key, so it doesn't have old run info
-        redis_client.set(redis_keys.ball_position, json.dumps(baseline_ball_position.tolist())) # Set to clean baseline value
-        print("~Reset ball redis key~")
+        #redis_client.set(redis_keys.ball_position, json.dumps(baseline_ball_position.tolist())) # Set to clean baseline value
+        #print("~Reset ball redis key~")
+        # SHOULDN'T HAVE TO RESET, IF STILL READING
 
         state = State.FINDING # If so, look for ball
 
@@ -333,7 +334,8 @@ try:
             bpos_str = redis_client.get(redis_keys.ball_position).decode("utf-8")
             orig_ball_pos = np.array([float(p) for p in bpos_str.strip("[]").split(",")])  # Initial position (m)
             
-            current_ball_position = transform_Optitrack2Sim(orig_ball_pos)
+            #current_ball_position = transform_Optitrack2Sim(orig_ball_pos)
+            current_ball_position = orig_ball_pos
 
             print(f"Current ball position = {current_ball_position}")
             
@@ -470,7 +472,8 @@ try:
             bpos_str = redis_client.get(redis_keys.ball_position).decode("utf-8")
             orig_ball_pos = np.array([float(p) for p in bpos_str.strip("[]").split(",")])  # Initial position (m)
             
-            current_ball_position = transform_Optitrack2Sim(orig_ball_pos)
+            #current_ball_position = transform_Optitrack2Sim(orig_ball_pos)
+            current_ball_position = orig_ball_pos
 
             if (current_ball_position[0] > CUTOFF_INITIAL):
                 print("---RESETTING---")

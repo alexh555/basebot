@@ -172,7 +172,7 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
         redis_client.setEigen(JOINT_VELOCITIES_KEY, sim->getJointVelocities(robot_name));
 
 		// Launch ball after 2 seconds
-		if(!ball_launched && step_count > (2*sim_freq))
+		if(!ball_launched && step_count > (1*sim_freq))
 		{
 			// NOW, create ball
 			std::random_device rd;            // Setup random
@@ -209,12 +209,29 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 				object_velocities[i] = sim->getObjectVelocity(object_names[i]);
 			}
 
-			// Post ball info, if launched
-			if (ball_launched)
+			// Post ball info, ALWAYS
+			Vector3d ball_pos_to_print = object_poses[0].translation();
+			redis_client.setEigen(TRUE_BALL_POS, ball_pos_to_print);
+			// if (ball_launched)
+			// {
+			// 	Vector3d ball_pos_to_print = object_poses[0].translation();
+			// 	// cout << "Ball pos = " << ball_pos_to_print.transpose() << endl;
+			// 	redis_client.setEigen(TRUE_BALL_POS, ball_pos_to_print);
+			// }
+
+			// RESET BALL AFTER IT GOES REALLY FAR AWAY
+			if (ball_pos_to_print[0] < -10.0)
 			{
-				Vector3d ball_pos_to_print = object_poses[0].translation();
-				// cout << "Ball pos = " << ball_pos_to_print.transpose() << endl;
-				//redis_client.setEigen(TRUE_BALL_POS, ball_pos_to_print);
+				// Put ball at starting point
+				Vector3d reset_velo(0.0, 0.0, 0.0);
+				Affine3d reset_pose = Eigen::Affine3d::Identity();
+				reset_pose.translation() = Eigen::Vector3d(5.0, 0.0, 1.0);
+				sim->setObjectVelocity(object_names[0], reset_velo);
+				sim->setObjectPose(object_names[0], reset_pose);
+
+				// Prep to launch ball again
+				ball_launched = false;
+				step_count = 0;
 			}
 			
 		}

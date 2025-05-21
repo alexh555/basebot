@@ -13,10 +13,14 @@ from filterpy.kalman import KalmanFilter
 
 DEG_TO_RAD = math.pi / 180.0
 NUM_POINTS_EST = 3
-CUTOFF_INITIAL = 3.5
+CUTOFF_INITIAL = 2.6
 
 init_position = np.array([0.1, -0.50, 0.5]) # Where to put net center at start
 init_orientation = np.array([[1.0,0,0],[0,-1.0,0],[0,0,-1.0]])
+
+joint_goal = np.array([-30.0, -15.0, -15.0, -105.0, 0.0, 90.0, 45.0])
+joint_goal = joint_goal * np.pi/180.0
+
 
 class State(Enum):
   INIT = auto()
@@ -33,8 +37,8 @@ def transform_Optitrack2Sim(position):
     # FIT TO SIM
     position = list(position)
     orig_pos = position.copy()
-    position[0] = orig_pos[2] + 5 - 0.5 # Remove second term to to align with blue X
-    position[1] = orig_pos[0] - 0.75 #- 0.7 # Remove second term to to align with blue X
+    position[0] = orig_pos[2] + 5
+    position[1] = orig_pos[0] - 0.75
     position[2] = orig_pos[1] - 0.4
     position = np.array(position)
    
@@ -62,14 +66,6 @@ def velocity_polyfit(times, positions, t_eval=None):
         velocity[i] = 2 * a * t_eval + b
 
     return velocity
-
-# def position_polyfit(times, positions, x_cut = 0.1)
-#    """
-#    Position prediction based on polynomail fitting
-#    """
-
-#    times = np.array(times)
-#    positions = np.array(positions)
 
 def velocity_kf(delta_t):
    kf = KalmanFilter(dim_x=6, dim_z=3)
@@ -211,7 +207,7 @@ def velo_to_ori(velocity_vec):
 """ End HELPER FUNCTIONS """
 
 # CHANGE TO TRUE TO RUN IN SIMULATION
-simulation = True
+simulation = False
 
 # *** REDIS SETUP ***
 RIGID_BODY_POS_KEY = "sai2::optitrack::rigid_body_pos::"
@@ -239,6 +235,9 @@ class RedisKeys:
   gripper_control: str = "sai::FrankaRobot::gripper::mode"
   object_present_flag: str = "realsense_demo_object_present_flag"
   object_location: str = "realsense_demo_cube_pos"
+
+  # JOINT TASK KEYS
+  cartesian_task_joint_goal: str = "sai::controllers::" + prefix + "::cartesian_controller::joint_task::goal_position"
 
   # CATCHING KEYS
   ball_position: str = RIGID_BODY_POS_KEY + BALL_RB_NUM
@@ -279,8 +278,6 @@ ori_error = 1
 
 velKF = velocity_kf(dt)
 
-baseline_ball_position = np.array([5.0, 0.0, 1.0])
-
 # Check dt computation
 t_prev = time.time()
 t_next = time.time()
@@ -312,16 +309,13 @@ try:
     if state == State.INIT:
 
         # Ensure got to intial position
-        #if pos_error < 1e-2 and ori_error < 1e-1:
-        goal_position = init_position
-        goal_orientation = init_orientation
-        print("Moved to INIT position")
+        if pos_error < 1e-2 and ori_error < 1e-1:
+           print("Moved to INIT position")
 
-        #redis_client.delete(redis_keys.ball_position) # Clear the ball redis key, so it doesn't have old run info
-        redis_client.set(redis_keys.ball_position, json.dumps(baseline_ball_position.tolist())) # Set to clean baseline value
-        print("~Reset ball redis key~")
+           redis_client.delete(redis_keys.ball_position) # Clear the ball redis key, so it doesn't have old run info
+           print("~Reset ball redis key~")
 
-        state = State.FINDING # If so, look for ball
+           state = State.FINDING # If so, look for ball
 
 
     elif state == State.FINDING:
@@ -343,9 +337,6 @@ try:
                 # Check if ball past catchable position
                 if (current_ball_position[0] < 0):
                     state = State.FINISH # Stop updating, just move to catch position and stop
-
-                    tracking_list = [] # Clear polynomial lists
-                    time_list = []
                 else:
 
                     """ KALMAN APPROACH """
@@ -401,15 +392,15 @@ try:
                     #     tracking_list.append(current_ball_position)
 
                     # if(len(tracking_list) > NUM_POINTS_EST):
-                    #     current_ball_velocity = velocity_polyfit(time_list, tracking_list, time.time())
-                    #     print(f"VELOCITY ESTIMATE = {current_ball_velocity}")
+                    #    current_ball_velocity = velocity_polyfit(time_list, tracking_list, time.time())
+                    #    print(f"VELOCITY ESTIMATE = {current_ball_velocity}")
 
-                    #     # Generate resulting catch point
-                    #     new_position, new_orientation, new_flag = get_catch_point(current_ball_position, current_ball_velocity)
-                    #     #if new_flag: # Only update goal position on valid re-estimate
-                    #     goal_position = new_position
-                    #     goal_orientation = new_orientation
-                    #     #print(f"NEW GOAL POS: {goal_position}")
+                    #    # Generate resulting catch point
+                    #    new_position, new_orientation = get_catch_point(current_ball_position, current_ball_velocity)
+                        # if new_flag: # Only update goal position on valid re-estimate
+                        #     goal_position = new_position
+                        #     goal_orientation = new_orientation
+                        #     print(f"NEW GOAL POS: {goal_position}")
                     
                     """ SINGLE ESTIMATE APPRAOCH """
                     # if (len(tracking_list) < NUM_POINTS_EST):
@@ -464,33 +455,34 @@ try:
     elif state == State.FINISH:
 
         # Wait until ball returns to start, then return to finish
-        if( redis_client.exists(redis_keys.ball_position) ):
+        # if( redis_client.exists(redis_keys.ball_position) ):
 
-            # Read in init ball 
-            bpos_str = redis_client.get(redis_keys.ball_position).decode("utf-8")
-            orig_ball_pos = np.array([float(p) for p in bpos_str.strip("[]").split(",")])  # Initial position (m)
+        #     # Read in init ball 
+        #     bpos_str = redis_client.get(redis_keys.ball_position).decode("utf-8")
+        #     orig_ball_pos = np.array([float(p) for p in bpos_str.strip("[]").split(",")])  # Initial position (m)
             
-            current_ball_position = transform_Optitrack2Sim(orig_ball_pos)
+        #     current_ball_position = transform_Optitrack2Sim(orig_ball_pos)
 
-            if (current_ball_position[0] > CUTOFF_INITIAL):
-                print("---RESETTING---")
-                goal_position = init_position
-                goal_orientation = init_orientation
+        #     if (current_ball_position[0] > CUTOFF_INITIAL):
+        #         goal_position = init_position
+        #         goal_orientation = init_orientation
 
-                state = State.INIT
+        #         state = State.INIT
 
         # Go back to initial
-        # input("Press enter to reset: ") 
-        # goal_position = init_position
-        # goal_orientation = init_orientation
+        input("Press enter to reset: ") 
+        goal_position = init_position
+        goal_orientation = init_orientation
 
-        # state = State.INIT
+        state = State.INIT
 
 
     # *** ALWAYS TRANSMIT GOAL, unless at end ***
     if state != State.FINISH:
-        redis_client.set(redis_keys.catching_position, json.dumps(goal_position.tolist()))
-        redis_client.set(redis_keys.catching_orientation, json.dumps(goal_orientation.tolist()))
+        redis_client.set(redis_keys.cartesian_task_goal_position, json.dumps(goal_position.tolist()))
+        redis_client.set(redis_keys.cartesian_task_goal_orientation, json.dumps(goal_orientation.tolist()))
+
+        redis_client.set(redis_keys.cartesian_task_joint_goal, json.dumps(joint_goal.tolist())) # Secondary joint task
 
 except KeyboardInterrupt:
   print("Keyboard interrupt")

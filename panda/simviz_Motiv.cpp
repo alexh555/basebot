@@ -136,8 +136,8 @@ static Vector3d transform_ball_pos(Vector3d pos_from_redis)
 	Vector3d orig_pos = pos_from_redis;
 	Vector3d transf_pos = orig_pos;
 
-    transf_pos[0] = orig_pos[2] + 5;
-    transf_pos[1] = orig_pos[0] - 0.75;
+    transf_pos[0] = orig_pos[2] + 5 - 0.5; // Remove second term to to align with blue X
+    transf_pos[1] = orig_pos[0] - 0.75; //- 0.7; // Remove second term to to align with blue X
     transf_pos[2] = orig_pos[1] - 0.4;
 	
 	return transf_pos;
@@ -169,8 +169,8 @@ void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim) {
 	bool ball_launched = false;
 
 	// Wait for start
-	std::cout << "Press ENTER to start simulation..." << std::endl;
-	std::cin.ignore();
+	// std::cout << "Press ENTER to start simulation..." << std::endl;
+	// std::cin.ignore();
 
 	while (fSimulationRunning) {
 		timer.waitForNextLoop();
