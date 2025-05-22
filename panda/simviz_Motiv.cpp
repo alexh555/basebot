@@ -143,7 +143,7 @@ static Vector3d transform_ball_pos(Vector3d pos_from_redis)
 
 	// V2 - Someone changed origin
 	transf_pos[0] = -orig_pos[1] + 5 - 0.5; //
-    transf_pos[1] = orig_pos[0]; //
+    transf_pos[1] = orig_pos[0] - 0.7; //
     transf_pos[2] = orig_pos[2] - 0.4;
 	
 	return transf_pos;

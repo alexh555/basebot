@@ -30,15 +30,24 @@ def transform_Optitrack2Sim(position):
     Transform Optitrack room coords to those making sense in simulator
     """
 
-    # FIT TO SIM
+    # FIT TO SIM - ORIGINAL
+    # position = list(position)
+    # orig_pos = position.copy()
+    # position[0] = orig_pos[2] + 5 - 0.5 # Remove second term to to align with blue X
+    # position[1] = orig_pos[0] - 0.75 #- 0.7 # Remove second term to to align with blue X
+    # position[2] = orig_pos[1] - 0.4
+    # position = np.array(position)
+
+    # FIT TO SIM - Someone redefined the origin
     position = list(position)
     orig_pos = position.copy()
-    position[0] = orig_pos[2] + 5 - 0.5 # Remove second term to to align with blue X
-    position[1] = orig_pos[0] - 0.75 #- 0.7 # Remove second term to to align with blue X
-    position[2] = orig_pos[1] - 0.4
+    position[0] = -orig_pos[1] + 5 - 0.5 # Remove second term to to align with blue X
+    position[1] = orig_pos[0] - 0.7 # Remove second term to to align with blue X
+    position[2] = orig_pos[2] - 0.4
     position = np.array(position)
    
     return position
+   
    
 
 def velocity_polyfit(times, positions, t_eval=None):
@@ -351,45 +360,45 @@ try:
                 else:
 
                     """ KALMAN APPROACH """
-                    # # Kalman update
-                    # z = np.array(current_ball_position).reshape((3,1))
-                    # velKF.predict()
-                    # velKF.update(z)
+                    # Kalman update
+                    z = np.array(current_ball_position).reshape((3,1))
+                    velKF.predict()
+                    velKF.update(z)
 
-                    # current_ball_velocity = velKF.x[3:].flatten()
-                    # print(f"VELOCITY ESTIMATE = {current_ball_velocity}")
+                    current_ball_velocity = velKF.x[3:].flatten()
+                    print(f"VELOCITY ESTIMATE = {current_ball_velocity}")
                         
-                    # # Generate resulting catch point
-                    # new_position, new_orientation, new_flag = get_catch_point(current_ball_position, current_ball_velocity)
-                    # goal_position = new_position
-                    # goal_orientation = new_orientation
-                    # print(f"NEW GOAL POS: {goal_position}")
+                    # Generate resulting catch point
+                    new_position, new_orientation, new_flag = get_catch_point(current_ball_position, current_ball_velocity)
+                    goal_position = new_position
+                    goal_orientation = new_orientation
+                    print(f"NEW GOAL POS: {goal_position}")
 
                     """ VELOCITY APPROACH """
-                    if firstFlag:
-                       # Hand first reading
-                       t_prev = time.time()
-                       pos_prev = current_ball_position
-                       firstFlag = False
-                    else:
+                    # if firstFlag:
+                    #    # Hand first reading
+                    #    t_prev = time.time()
+                    #    pos_prev = current_ball_position
+                    #    firstFlag = False
+                    # else:
                     
-                       # Update velocity estimate
-                       t_next = time.time()
-                       cur_dt = t_next - t_prev
+                    #    # Update velocity estimate
+                    #    t_next = time.time()
+                    #    cur_dt = t_next - t_prev
 
-                       current_ball_velocity = (current_ball_position - pos_prev)/(cur_dt)
-                       print(f"VELOCITY ESTIMATE = {current_ball_velocity}")
+                    #    current_ball_velocity = (current_ball_position - pos_prev)/(cur_dt)
+                    #    print(f"VELOCITY ESTIMATE = {current_ball_velocity}")
 
-                       # Generate resulting catch point
-                       # ONLY GET CATCH POINT AND UPDATE PREVIOUS IF NON-ZERO VELOCITY (diff in pos)
-                       new_position, new_orientation, new_flag = get_catch_point(current_ball_position, current_ball_velocity)
-                       goal_position = new_position
-                       goal_orientation = new_orientation
-                       print(f"NEW GOAL POS: {goal_position}")
+                    #    # Generate resulting catch point
+                    #    # ONLY GET CATCH POINT AND UPDATE PREVIOUS IF NON-ZERO VELOCITY (diff in pos)
+                    #    new_position, new_orientation, new_flag = get_catch_point(current_ball_position, current_ball_velocity)
+                    #    goal_position = new_position
+                    #    goal_orientation = new_orientation
+                    #    print(f"NEW GOAL POS: {goal_position}")
 
-                        # Update for next estimate
-                       t_prev = t_next
-                       pos_prev = current_ball_position
+                    #     # Update for next estimate
+                    #    t_prev = t_next
+                    #    pos_prev = current_ball_position
                     
                     """ POLYFIT APPROACH """
                     # if firstFlag:
