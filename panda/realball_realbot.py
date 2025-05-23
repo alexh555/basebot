@@ -13,14 +13,14 @@ from filterpy.kalman import KalmanFilter
 
 DEG_TO_RAD = math.pi / 180.0
 NUM_POINTS_EST = 3
-CUTOFF_INITIAL = 3.5
+CUTOFF_INITIAL = 4.0
 
 STOP_CUTOFF = 0.25 # Where it starts assuming ball has been caught
 
 init_position = np.array([0.1, -0.50, 0.5]) # Where to put net center at start
 init_orientation = np.array([[1.0,0,0],[0,-1.0,0],[0,0,-1.0]])
 
-estimated_init_velo = np.array([-5.0, 0.0, 1.0])
+estimated_init_velo = np.array([0.0, 0.0, 0.0])#np.array([-5.0, 0.0, 1.0])
 kf_init_estimate = np.array([CUTOFF_INITIAL, 0.0, 1.0, -5.0, 0.0, 1.0])
 
 class State(Enum):
@@ -422,7 +422,7 @@ try:
                         pos_prev = current_ball_position
                         firstFlag = False
 
-                        initial_state_estimate = np.concatenate(current_ball_position, estimated_init_velo)
+                        initial_state_estimate = np.concatenate([current_ball_position, estimated_init_velo])
                         velKF.x = np.array(initial_state_estimate)
                     else:
                         t_cur = time.time()
