@@ -1,0 +1,5 @@
+/home/clyde/OpenSai/projects/basebot/panda/build/CMakeFiles/rebuild_cache.dir
+/home/clyde/OpenSai/projects/basebot/panda/build/CMakeFiles/edit_cache.dir
+/home/clyde/OpenSai/projects/basebot/panda/build/CMakeFiles/simviz_Motiv.dir
+/home/clyde/OpenSai/projects/basebot/panda/build/CMakeFiles/controller_catch.dir
+/home/clyde/OpenSai/projects/basebot/panda/build/CMakeFiles/simviz_panda_gripper.dir

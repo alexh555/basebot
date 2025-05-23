@@ -4,9 +4,12 @@
  * 
  */
 
-const std::string JOINT_ANGLES_KEY = "sai::sim::panda::sensors::q";
-const std::string JOINT_VELOCITIES_KEY = "sai::sim::panda::sensors::dq";
-const std::string JOINT_TORQUES_COMMANDED_KEY = "sai::sim::panda::actuators::fgc";
+std::string JOINT_ANGLES_KEY = "sai::sim::panda::sensors::q";
+std::string JOINT_VELOCITIES_KEY = "sai::sim::panda::sensors::dq";
+std::string JOINT_TORQUES_COMMANDED_KEY = "sai::sim::panda::actuators::fgc";
+
+
+
 const std::string CONTROLLER_RUNNING_KEY = "sai::sim::panda::controller";
 
 const std::string GRIPPER_JOINT_ANGLES_KEY = "sai::sim::panda_gripper::sensors::q";
@@ -22,3 +25,6 @@ const std::string ROBOT_EE_POS = "sai::controllers::Panda::cartesian_controller:
 const std::string ROBOT_EE_ORI = "sai::controllers::Panda::cartesian_controller::cartesian_task::current_orientation";
 
 const std::string TRUE_BALL_POS = "sai2::optitrack::rigid_body_pos::4";
+
+
+ std::string MASS_MATRIX_KEY;

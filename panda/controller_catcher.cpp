@@ -29,9 +29,30 @@ void sighandler(int){runloop = false;}
 // };
 // Python runs state machine now
 
+
+bool simulation = false;
+
+
+
 int main() {
+
+
+	if (simulation){
+		cout << "SIMULATION TRUE" << endl;
+		JOINT_ANGLES_KEY = "sai::sim::PANDA::sensors::q";
+		JOINT_VELOCITIES_KEY = "sai::sim::PANDA::sensors::dq";
+		JOINT_TORQUES_COMMANDED_KEY = "sai::sim::PANDA::actuators::fgc";
+	} else{
+		cout << "SIMULATION FALSE" << endl;
+		JOINT_TORQUES_COMMANDED_KEY = "sai::commands::FrankaRobot::control_torques";
+		JOINT_VELOCITIES_KEY = "sai::sensors::FrankaRobot::joint_velocities";
+		JOINT_ANGLES_KEY = "sai::sensors::FrankaRobot::joint_positions";
+		MASS_MATRIX_KEY = "sai::sensors::FrankaRobot::model::mass_matrix";
+	}
+
+
 	// Location of URDF files specifying world and robot information
-	static const string robot_file = string(CS225A_URDF_FOLDER) + "/panda/panda_arm_net.urdf";
+	static const string robot_file = "../../urdf/panda_arm_net.urdf";
 
 	// initial state 
 	// int state = POSTURE;
@@ -52,6 +73,17 @@ int main() {
 	robot->setDq(redis_client.getEigen(JOINT_VELOCITIES_KEY));
 	robot->updateModel();
 
+
+	MatrixXd M = robot->M();
+	if(!simulation) {
+		M = redis_client.getEigen(MASS_MATRIX_KEY);
+		// bie addition
+		M(4,4) += 0.2;
+		M(5,5) += 0.2;
+		M(6,6) += 0.2;
+	}
+	robot->updateModel(M);
+
 	// prepare controller
 	int dof = robot->dof();
 	VectorXd command_torques = VectorXd::Zero(dof);  // panda + gripper torques 
@@ -63,10 +95,17 @@ int main() {
 	Affine3d compliant_frame = Affine3d::Identity();
 	compliant_frame.translation() = control_point;
 	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
-	pose_task->setPosControlGains(400, 40, 0);
-	pose_task->setOriControlGains(400, 40, 0);
+	pose_task->setPosControlGains(200, 20, 0);
+	pose_task->setOriControlGains(200, 20, 0);
 	pose_task->disableVelocitySaturation();
-	pose_task->disableInternalOtg();
+
+	pose_task->enableInternalOtgAccelerationLimited(
+		0.60,
+		2.0, 
+		M_PI / 3.0,
+		2.0 * M_PI);
+
+	//pose_task->disableInternalOtg();
 
 	Vector3d ee_pos;
 	Matrix3d ee_ori;
@@ -84,7 +123,7 @@ int main() {
 
 	// joint task
 	auto joint_task = std::make_shared<SaiPrimitives::JointTask>(robot);
-	joint_task->setGains(400, 40, 0);
+	joint_task->setGains(100, 20, 0);
 
 	VectorXd q_desired(dof);
 	q_desired.head(7) << -30.0, -15.0, -15.0, -105.0, 0.0, 90.0, 45.0;
@@ -109,6 +148,17 @@ int main() {
 		robot->setQ(redis_client.getEigen(JOINT_ANGLES_KEY));
 		robot->setDq(redis_client.getEigen(JOINT_VELOCITIES_KEY));
 		robot->updateModel();
+
+		M = robot->M();
+		if(!simulation) {
+			M = redis_client.getEigen(MASS_MATRIX_KEY);
+			// bie addition
+			M(4,4) += 0.2;
+			M(5,5) += 0.2;
+			M(6,6) += 0.2;
+		}
+		robot->updateModel(M);
+
 
 		// Read goal from Python, if available
 		if(redis_client.exists(CATCHING_POS) && redis_client.exists(CATCHING_ORI)) {

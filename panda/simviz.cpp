@@ -51,9 +51,9 @@ const int n_objects = object_names.size();
 void simulation(std::shared_ptr<SaiSimulation::SaiSimulation> sim);
 
 int main() {
-	SaiModel::URDF_FOLDERS["CS225A_URDF_FOLDER"] = string(CS225A_URDF_FOLDER);
-	static const string robot_file = string(CS225A_URDF_FOLDER) + "/panda/panda_arm_net.urdf";
-	static const string world_file = string(PANDA_FOLDER) + "/world.urdf";
+
+	static const string robot_file = "../../urdf/panda_arm_net.urdf";
+	static const string world_file = "../../world.urdf";
 	std::cout << "Loading URDF world model file: " << world_file << endl;
 
 	// start redis client
