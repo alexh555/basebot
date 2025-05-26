@@ -29,9 +29,30 @@ void sighandler(int){runloop = false;}
 // };
 // Python runs state machine now
 
+
+bool simulation = true;
+
+
+
 int main() {
+
+
+	if (simulation){
+		cout << "SIMULATION TRUE" << endl;
+		JOINT_ANGLES_KEY = "sai::sim::panda::sensors::q";
+		JOINT_VELOCITIES_KEY = "sai::sim::panda::sensors::dq";
+		JOINT_TORQUES_COMMANDED_KEY = "sai::sim::panda::actuators::fgc";
+	} else{
+		cout << "SIMULATION FALSE" << endl;
+		JOINT_TORQUES_COMMANDED_KEY = "sai::commands::FrankaRobot::control_torques";
+		JOINT_VELOCITIES_KEY = "sai::sensors::FrankaRobot::joint_velocities";
+		JOINT_ANGLES_KEY = "sai::sensors::FrankaRobot::joint_positions";
+		MASS_MATRIX_KEY = "sai::sensors::FrankaRobot::model::mass_matrix";
+	}
+
+
 	// Location of URDF files specifying world and robot information
-	static const string robot_file = string(CS225A_URDF_FOLDER) + "/panda/panda_arm_net.urdf";
+	static const string robot_file = "../../urdf_models/panda/panda_arm_bat.urdf";
 
 	// initial state 
 	// int state = POSTURE;
@@ -52,6 +73,17 @@ int main() {
 	robot->setDq(redis_client.getEigen(JOINT_VELOCITIES_KEY));
 	robot->updateModel();
 
+
+	// MatrixXd M = robot->M();
+	// if(!simulation) {
+	// 	M = redis_client.getEigen(MASS_MATRIX_KEY);
+	// 	// bie addition
+	// 	M(4,4) += 0.2;
+	// 	M(5,5) += 0.2;
+	// 	M(6,6) += 0.2;
+	// }
+	// robot->updateModel(M);
+
 	// prepare controller
 	int dof = robot->dof();
 	VectorXd command_torques = VectorXd::Zero(dof);  // panda + gripper torques 
@@ -59,14 +91,21 @@ int main() {
 
 	// arm task
 	const string control_link = "end-effector";
-	const Vector3d control_point = Vector3d(0, 0, 0.17);
+	const Vector3d control_point = Vector3d(0.5, 0, 0.0); //TODO: check
 	Affine3d compliant_frame = Affine3d::Identity();
 	compliant_frame.translation() = control_point;
 	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
-	pose_task->setPosControlGains(400, 40, 0);
-	pose_task->setOriControlGains(400, 40, 0);
+	pose_task->setPosControlGains(200, 20, 0);
+	pose_task->setOriControlGains(200, 20, 0);
 	pose_task->disableVelocitySaturation();
-	pose_task->disableInternalOtg();
+
+	pose_task->enableInternalOtgAccelerationLimited(
+		0.60,
+		2.0, 
+		M_PI / 3.0,
+		2.0 * M_PI);
+
+	//pose_task->disableInternalOtg();
 
 	Vector3d ee_pos;
 	Matrix3d ee_ori;
@@ -84,7 +123,7 @@ int main() {
 
 	// joint task
 	auto joint_task = std::make_shared<SaiPrimitives::JointTask>(robot);
-	joint_task->setGains(400, 40, 0);
+	joint_task->setGains(100, 20, 0);
 
 	VectorXd q_desired(dof);
 	q_desired.head(7) << -30.0, -15.0, -15.0, -105.0, 0.0, 90.0, 45.0;
@@ -110,14 +149,33 @@ int main() {
 		robot->setDq(redis_client.getEigen(JOINT_VELOCITIES_KEY));
 		robot->updateModel();
 
+		// M = robot->M();
+		// if(!simulation) {
+		// 	M = redis_client.getEigen(MASS_MATRIX_KEY);
+		// 	// bie addition
+		// 	M(4,4) += 0.2;
+		// 	M(5,5) += 0.2;
+		// 	M(6,6) += 0.2;
+		// }
+		// robot->updateModel(M);
+
+
 		// Read goal from Python, if available
 		if(redis_client.exists(CATCHING_POS) && redis_client.exists(CATCHING_ORI)) {
 
 			// Update goals
 			ee_pos = redis_client.getEigen(CATCHING_POS);
 			ee_ori = redis_client.getEigen(CATCHING_ORI);
-
+			// check validity
+			bool is_valid_rot = (abs(ee_ori.determinant() - 1.0) < 1e-3) && 
+			((ee_ori * ee_ori.transpose()).isApprox(Matrix3d::Identity(), 1e-3));
+			if (!is_valid_rot) {
+				cout << "Invalid orientation received: " << ee_ori << endl;
+				// ee_ori = Matrix3d::Identity(); // reset to identity if invalid
+			}
 			// Update torques
+			cout << "Setting pose task goal position: " << ee_pos.transpose() << endl;
+			cout << "Setting pose task goal orientation: " << ee_ori << endl;
 			pose_task->setGoalPosition(ee_pos);
 			pose_task->setGoalOrientation(ee_ori);
 
@@ -138,6 +196,13 @@ int main() {
 
 		// execute redis write callback
 		redis_client.setEigen(JOINT_TORQUES_COMMANDED_KEY, command_torques);
+
+		// Also share robot position
+		redis_client.setEigen(ROBOT_EE_POS, robot->position(control_link, control_point));
+
+		Matrix3d rot_in_link;
+        rot_in_link << 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0;
+		redis_client.setEigen(ROBOT_EE_ORI, robot->rotation(control_link, rot_in_link));
 	}
 
 	timer.stop();
