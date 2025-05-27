@@ -100,7 +100,7 @@ int main() {
 	pose_task->disableVelocitySaturation();
 
 	pose_task->enableInternalOtgAccelerationLimited(
-		0.60,
+		1.50,
 		2.0, 
 		M_PI / 3.0,
 		2.0 * M_PI);

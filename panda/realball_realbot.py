@@ -17,11 +17,13 @@ CUTOFF_INITIAL = 4.0
 
 STOP_CUTOFF = 0.25 # Where it starts assuming ball has been caught
 
-init_position = np.array([0.1, -0.50, 0.5]) # Where to put net center at start
+init_position = np.array([0.0, -0.40, 0.5]) # Where to put net center at start
 init_orientation = np.array([[1.0,0,0],[0,-1.0,0],[0,0,-1.0]])
 
 estimated_init_velo = np.array([0.0, 0.0, 0.0])#np.array([-5.0, 0.0, 1.0])
 kf_init_estimate = np.array([CUTOFF_INITIAL, 0.0, 1.0, -5.0, 0.0, 1.0])
+
+u_gravity = np.array([0.0, 0.0, -9.8])
 
 class State(Enum):
   INIT = auto()
@@ -37,18 +39,33 @@ def transform_ball2arm(ball_pos, arm_pos):
    """
 
    # Flip axes appropriately
+#    arm_pos = list(arm_pos)
+#    orig_arm_pos = arm_pos.copy()
+#    arm_pos[0] = -orig_arm_pos[1]
+#    arm_pos[1] = orig_arm_pos[0]
+#    arm_pos[2] = orig_arm_pos[2]
+#    arm_pos = np.array(arm_pos)
+
+#    ball_pos = list(ball_pos)
+#    orig_ball_pos = ball_pos.copy()
+#    ball_pos[0] = -orig_ball_pos[1]
+#    ball_pos[1] = orig_ball_pos[0]
+#    ball_pos[2] = orig_ball_pos[2]
+#    ball_pos = np.array(ball_pos)
+
+   # ALT VERSION
    arm_pos = list(arm_pos)
    orig_arm_pos = arm_pos.copy()
-   arm_pos[0] = -orig_arm_pos[1]
+   arm_pos[0] = orig_arm_pos[2]
    arm_pos[1] = orig_arm_pos[0]
-   arm_pos[2] = orig_arm_pos[2]
+   arm_pos[2] = orig_arm_pos[1]
    arm_pos = np.array(arm_pos)
 
    ball_pos = list(ball_pos)
    orig_ball_pos = ball_pos.copy()
-   ball_pos[0] = -orig_ball_pos[1]
+   ball_pos[0] = orig_ball_pos[2]
    ball_pos[1] = orig_ball_pos[0]
-   ball_pos[2] = orig_ball_pos[2]
+   ball_pos[2] = orig_ball_pos[1]
    ball_pos = np.array(ball_pos)
 
    # Perform subtraction
@@ -129,12 +146,18 @@ def velocity_kf(delta_t):
    #kf.x = np.zeros((6,1))
    kf.x = kf_init_estimate
 
+   # Bringing in gravity
+   kf.B = np.block([
+       [0.5 * dt**2 * np.eye(3)], # Position
+       [dt * np.eye(3)] # velocity
+   ])
+
    # Covariances (TO BE TUNED)
-   kf.P *= 1.0
+   kf.P = np.diag([1e-2, 1e-2, 1e-2, 1.0, 1.0, 1.0]) #*= 1.0 # Low in pos, high in vel = confident in pos, not in velo
    kf.R *= 0.0001
    kf.Q = np.block([
-      [1e-6 * np.eye(3),      np.zeros((3, 3))],
-      [np.zeros((3, 3)),  1e-3 * np.eye(3)]     # ← velocity noise: allow adaptation
+      [1e-5 * np.eye(3),      np.zeros((3, 3))],
+      [np.zeros((3, 3)),  1e-1 * np.eye(3)]     # ← velocity noise: allow adaptation (low value, adapt velocity more)
     ])
 
    return kf
@@ -149,6 +172,43 @@ def estimate_velocity_cd(pos, delta_t):
     velo_est = (25*pos[4] - 48*pos[3] + 36*pos[2] - 16*pos[1] + 3*pos[0])/(12*delta_t)
 
     return velo_est
+
+def closed_form_catchpoint(pbi, vbi, xf = 0.1):
+    """
+    Determines point where robot should catch ball given initial ball velocity and position
+    But, does so with closed form solution rather than for loop
+    """
+
+    # Parse out constants
+    gravity = np.array([0, 0, -9.8])  # Acceleration due to gravity (m/s^2)
+    x0 = pbi[0]
+    y0 = pbi[1]
+    z0 = pbi[2]
+    vx = vbi[0]
+    vy = vbi[1]
+    vz = vbi[2]
+
+    # Solve
+    tf = (xf-x0)/vx
+
+    yf = y0 + vy*tf
+    zf = z0 + vz*tf + 0.5*gravity[2]*tf*tf
+
+    current_position = np.array([xf, yf, zf])
+    current_velocity = vbi + tf*gravity
+
+    # Clip at limits
+    lower_pos_bound = np.array([-0.1, -0.9, 0.2])
+    upper_pos_bound = np.array([0.25, -0.1, 1.1 ])
+
+    current_position = np.clip(current_position, lower_pos_bound, upper_pos_bound)
+    #next_ori = velo_to_ori(current_velocity)
+    next_ori = init_orientation # For now, maintain orientation to speed things up and avoid weird motions
+
+    # print("") #Debugger
+    # print(f"~~~~~New goal:{current_position}")
+
+    return current_position, next_ori, True
 
 def get_catch_point(pbi, vbi): 
     """
@@ -216,8 +276,8 @@ def get_catch_point(pbi, vbi):
     #next_ori = velo_to_ori(current_velocity)
     next_ori = init_orientation # For now, maintain orientation to speed things up and avoid weird motions
     
-    print("") #Debugger
-    print(f"~~~New velo and goal:{current_velocity}, {current_position}")
+    # print("") #Debugger
+    # print(f"~~~New velo and goal:{current_velocity}, {current_position}")
 
     return current_position, next_ori, True
 
@@ -353,6 +413,8 @@ cur_dt = 0.0
 firstFlag = True
 first_time = 0.0
 
+print_counter = 0.0
+
 try:
   print("...Starting...")
 
@@ -380,16 +442,17 @@ try:
     if state == State.INIT:
 
         # Ensure got to intial position
-        #if pos_error < 1e-2 and ori_error < 1e-1:
-        goal_position = init_position
-        goal_orientation = init_orientation
-        print("Moved to INIT position")
+        print("Initializing...")
+        if pos_error < 1e-1 and ori_error < 1e-1:
+            goal_position = init_position
+            goal_orientation = init_orientation
+            print("Moved to INIT position")
 
-        #redis_client.delete(redis_keys.ball_position) # Clear the ball redis key, so it doesn't have old run info
-        redis_client.set(redis_keys.ball_position, json.dumps(baseline_ball_position.tolist())) # Set to clean baseline value
-        print("~Reset ball redis key~")
+            #redis_client.delete(redis_keys.ball_position) # Clear the ball redis key, so it doesn't have old run info
+            redis_client.set(redis_keys.ball_position, json.dumps(baseline_ball_position.tolist())) # Set to clean baseline value
+            print("~Reset ball redis key~")
 
-        state = State.FINDING # If so, look for ball
+            state = State.FINDING # If so, look for ball
 
 
     elif state == State.FINDING:
@@ -409,6 +472,9 @@ try:
                 # Check if ball past catchable position
                 if (current_ball_position[0] < STOP_CUTOFF):
                     state = State.FINISH # Stop updating, just move to catch position and stop
+
+                    print(f"FINAL ESTIMATED CATCH POINT: {goal_position}")
+                    print_counter = 0.0
 
                     tracking_list = [] # Clear polynomial lists
                     time_list = []
@@ -434,16 +500,21 @@ try:
                             velKF.F = np.block([
                                             [np.eye(3), dt_cur* np.eye(3)],
                                             [np.zeros((3,3)), np.eye(3)]
-                                        ])                          
+                                        ])    
+                            velKF.B = np.block([
+                                            [0.5 * dt_cur**2 * np.eye(3)], # Position
+                                            [dt_cur * np.eye(3)] # velocity
+                                        ])                       
                             z = np.array(current_ball_position).reshape((3,1))
-                            velKF.predict()
+                            velKF.predict(u=u_gravity)
                             velKF.update(z)
 
                             current_ball_velocity = velKF.x[3:].flatten()
                             #print(f"VELOCITY ESTIMATE = {current_ball_velocity}")
                                 
                             # Generate resulting catch point
-                            new_position, new_orientation, new_flag = get_catch_point(current_ball_position, current_ball_velocity)
+                            #new_position, new_orientation, new_flag = get_catch_point(current_ball_position, current_ball_velocity)
+                            new_position, new_orientation, new_flag = closed_form_catchpoint(current_ball_position, current_ball_velocity, 0.1)
                             goal_position = new_position
                             goal_orientation = new_orientation
                             #print(f"NEW GOAL POS: {goal_position}")
@@ -470,7 +541,7 @@ try:
                     #    # Generate resulting catch point
                     #    # ONLY GET CATCH POINT AND UPDATE PREVIOUS IF NON-ZERO VELOCITY (diff in pos)
                     #    if (np.linalg.norm(current_ball_velocity) > 1e-6):
-                    #       new_position, new_orientation, new_flag = get_catch_point(current_ball_position, current_ball_velocity)
+                    #       new_position, new_orientation, new_flag = closed_form_catchpoint(current_ball_position, current_ball_velocity)
                           
                     #       goal_position = new_position
                     #       goal_orientation = new_orientation                          
@@ -557,7 +628,7 @@ try:
     elif state == State.FINISH:
 
         # Wait until ball returns to start, then return to finish
-        print("------Waiting for reset")
+        #print(f"------Waiting for reset at {current_ball_position}")
         if( redis_client.exists(redis_keys.ball_position) ):
 
             # Read in init ball 
@@ -565,6 +636,11 @@ try:
             orig_ball_pos = np.array([float(p) for p in bpos_str.strip("[]").split(",")])  # Initial position (m)
             
             current_ball_position = transform_ball2arm(orig_ball_pos, arm_static_pos)
+
+            # Debug print
+            if(current_ball_position[0] < STOP_CUTOFF and print_counter < 10):
+                print(f"$$$ACTUAL final ball position: {current_ball_position}")
+                print_counter = print_counter + 1
 
             if (current_ball_position[0] > CUTOFF_INITIAL):
                 print("---RESETTING---")
@@ -585,10 +661,10 @@ try:
         # state = State.INIT
 
 
-    # *** ALWAYS TRANSMIT GOAL, unless at end ***
-    if state != State.FINISH:
-        redis_client.set(redis_keys.catching_position, json.dumps(goal_position.tolist()))
-        redis_client.set(redis_keys.catching_orientation, json.dumps(goal_orientation.tolist()))
+    # *** ALWAYS TRANSMIT GOAL ***
+    #if state != State.FINISH:
+    redis_client.set(redis_keys.catching_position, json.dumps(goal_position.tolist()))
+    redis_client.set(redis_keys.catching_orientation, json.dumps(goal_orientation.tolist()))
 
 except KeyboardInterrupt:
   print("Keyboard interrupt")
