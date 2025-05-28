@@ -15,10 +15,16 @@ DEG_TO_RAD = math.pi / 180.0
 NUM_POINTS_EST = 3
 CUTOFF_INITIAL = 4.0
 
+JUMPER_CUTOFF = 2.5 # Where it starts actually moving arm
+SCALING_CUTOFF = 2.5 # When to stop scaling
+
 STOP_CUTOFF = 0.25 # Where it starts assuming ball has been caught
 
-init_position = np.array([0.0, -0.40, 0.5]) # Where to put net center at start
-init_orientation = np.array([[1.0,0,0],[0,-1.0,0],[0,0,-1.0]])
+BASE_CLIPPER = -0.5 # Where to switch lowest z clip limit so as not to hit base
+
+init_position = np.array([0.1, -0.50, 0.5]) # Where to put net center at start
+#init_orientation = np.array([[1.0,0,0],[0,-1.0,0],[0,0,-1.0]])
+init_orientation = np.array([[1.0, 0.0, 0.0], [0.0, -np.sqrt(2)/2, -np.sqrt(2)/2], [0.0, np.sqrt(2)/2, -np.sqrt(2)/2]])
 
 estimated_init_velo = np.array([0.0, 0.0, 0.0])#np.array([-5.0, 0.0, 1.0])
 kf_init_estimate = np.array([CUTOFF_INITIAL, 0.0, 1.0, -5.0, 0.0, 1.0])
@@ -173,6 +179,31 @@ def estimate_velocity_cd(pos, delta_t):
 
     return velo_est
 
+def align_x_to_world(ori_current):
+    """
+    Get a goal orientation which maintains x but lets others drift
+    """
+    x_curr = ori_current[:,0]
+    x_goal = np.array([1.0, 0.0, 0.0])
+
+    # Cross product - get how to rotate
+    v = np.cross(x_curr, x_goal)
+    s = np.linalg.norm(v)
+    c = np.dot(x_curr, x_goal)
+
+    # Rodrigues formula
+    vx = np.array([
+        [0, -v[2], v[1]],
+        [v[2], 0, -v[0]],
+        [-v[1], v[0], 0]
+    ])
+    R_align = np.eye(3) + vx + vx @ vx * ((1-c) / (s**2 + 1e-8))
+
+    # Rotate current orientation to goal x with minimal change in others
+    R_goal = R_align @ ori_current
+    return R_goal
+
+
 def closed_form_catchpoint(pbi, vbi, xf = 0.1):
     """
     Determines point where robot should catch ball given initial ball velocity and position
@@ -197,9 +228,16 @@ def closed_form_catchpoint(pbi, vbi, xf = 0.1):
     current_position = np.array([xf, yf, zf])
     current_velocity = vbi + tf*gravity
 
-    # Clip at limits
-    lower_pos_bound = np.array([-0.1, -0.9, 0.2])
-    upper_pos_bound = np.array([0.25, -0.1, 1.1 ])
+    # *** LIMIT CLIPPING ***
+    if current_position[1] <= BASE_CLIPPER: # If far enough from base
+        lower_pos_bound = np.array([-0.1, -0.9, 0.0])
+        upper_pos_bound = np.array([0.25, -0.1, 1.1 ])
+    else:
+        lower_pos_bound = np.array([-0.1, -0.9, 0.2])
+        upper_pos_bound = np.array([0.25, -0.1, 1.1 ])
+
+    if current_position[2] <= 0.2:
+        lower_pos_bound = np.array([-0.1, -0.75, 0.0])
 
     current_position = np.clip(current_position, lower_pos_bound, upper_pos_bound)
     #next_ori = velo_to_ori(current_velocity)
@@ -443,7 +481,8 @@ try:
 
         # Ensure got to intial position
         print("Initializing...")
-        if pos_error < 1e-1 and ori_error < 1e-1:
+        #if pos_error < 1e-1 and ori_error < 1e-1:
+        if pos_error < 1e-1:
             goal_position = init_position
             goal_orientation = init_orientation
             print("Moved to INIT position")
@@ -474,6 +513,8 @@ try:
                     state = State.FINISH # Stop updating, just move to catch position and stop
 
                     print(f"FINAL ESTIMATED CATCH POINT: {goal_position}")
+                    if (goal_position[2] <= 0.2) or (goal_position[1] <= -0.9):
+                        print('OUTSIDE OF WORKSPACE')
                     print_counter = 0.0
 
                     tracking_list = [] # Clear polynomial lists
@@ -515,9 +556,40 @@ try:
                             # Generate resulting catch point
                             #new_position, new_orientation, new_flag = get_catch_point(current_ball_position, current_ball_velocity)
                             new_position, new_orientation, new_flag = closed_form_catchpoint(current_ball_position, current_ball_velocity, 0.1)
+
+                            # *** LINEAR SCALING
+                            # if current_position[0] < SCALING_CUTOFF:
+                            #     goal_position = (CUTOFF_INITIAL- current_position[0])/(CUTOFF_INITIAL-SCALING_CUTOFF)*(new_position - current_position) + current_position
+                            #     goal_position[0] = 0.1
+
+                            #     # Clipping
+                            #     if current_position[1] <= BASE_CLIPPER: # If far enough from base
+                            #         lower_goal_bound = np.array([-0.1, -0.9, 0.0])
+                            #         upper_goal_bound = np.array([0.25, -0.1, 1.1 ])
+                            #     else:
+                            #         lower_goal_bound = np.array([-0.1, -0.9, 0.2])
+                            #         upper_goal_bound = np.array([0.25, -0.1, 1.1 ])
+                                
+
+                            #     if current_position[2] <= 0.2:
+                            #         lower_pos_bound = np.array([-0.1, -0.75, 0.0])
+                            #     goal_position = np.clip(goal_position, lower_goal_bound, upper_goal_bound)
+
+                            # else:
+                            #     goal_position = new_position
+                            
+                            # goal_orientation = new_orientation
+
+                            # *** CUTOFF SCALING ***
+                            # if current_position[0] < JUMPER_CUTOFF:
+                            #     goal_position = new_position
+                            #     goal_orientation = new_orientation
+                            #     #goal_orientation = align_x_to_world(current_orientation)
+                            #     #print(f"NEW GOAL POS: {goal_position}")
+
+                            # *** NO SCALING ***
                             goal_position = new_position
                             goal_orientation = new_orientation
-                            #print(f"NEW GOAL POS: {goal_position}")
 
                             # Update previous
                             t_prev = t_cur
@@ -626,6 +698,8 @@ try:
            state = State.FINISH # If so, stop
     
     elif state == State.FINISH:
+
+        #goal_orientation = init_orientation # Ensure orientation maintained
 
         # Wait until ball returns to start, then return to finish
         #print(f"------Waiting for reset at {current_ball_position}")

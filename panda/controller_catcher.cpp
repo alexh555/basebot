@@ -94,18 +94,31 @@ int main() {
 	const Vector3d control_point = Vector3d(0, 0, 0.17);
 	Affine3d compliant_frame = Affine3d::Identity();
 	compliant_frame.translation() = control_point;
-	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
+	//auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, compliant_frame);
+
+	std::vector<Vector3d> controlled_pos_dirs;
+	controlled_pos_dirs.push_back(Vector3d(1, 0, 0));
+	controlled_pos_dirs.push_back(Vector3d(0, 1, 0));
+	controlled_pos_dirs.push_back(Vector3d(0, 0, 1));
+	std::vector<Vector3d> controlled_ori_dirs;
+	controlled_ori_dirs.push_back(Vector3d(0, 1, 0));
+	controlled_ori_dirs.push_back(Vector3d(0, 0, 1));
+	auto pose_task = std::make_shared<SaiPrimitives::MotionForceTask>(robot, control_link, controlled_pos_dirs, controlled_ori_dirs, compliant_frame);
+
 	pose_task->setPosControlGains(200, 20, 0);
 	pose_task->setOriControlGains(200, 20, 0);
-	pose_task->disableVelocitySaturation();
 
-	pose_task->enableInternalOtgAccelerationLimited(
-		1.50,
-		2.0, 
-		M_PI / 3.0,
-		2.0 * M_PI);
+	/* VELOCITY SAT*/
+	//pose_task->disableVelocitySaturation();
+	pose_task->enableVelocitySaturation(0.7, M_PI/3.0); // Was 0.7 and pi/3
 
-	//pose_task->disableInternalOtg();
+	/* OTG */
+	// pose_task->enableInternalOtgAccelerationLimited(
+	// 	1.50,
+	// 	2.0, 
+	// 	M_PI / 3.0,
+	// 	2.0 * M_PI);
+	pose_task->disableInternalOtg();
 
 	Vector3d ee_pos;
 	Matrix3d ee_ori;
@@ -126,9 +139,11 @@ int main() {
 	joint_task->setGains(100, 20, 0);
 
 	VectorXd q_desired(dof);
-	q_desired.head(7) << -30.0, -15.0, -15.0, -105.0, 0.0, 90.0, 45.0;
+	//q_desired.head(7) << -30.0, -15.0, -15.0, -105.0, 0.0, 90.0, 45.0;
+	//q_desired.head(7) << 130.0, 45.0, 160.0, -140.0, -45.0, 140.0 -45.0;
+	q_desired.head(7) << -60.0, 0.0, -15.0, -100.0, 0.0, 100.0 -60.0;
 	q_desired.head(7) *= M_PI / 180.0;
-	//q_desired.tail(2) << 0.04, -0.04;
+	//q_desired.head(7) = robot->q();
 	joint_task->setGoalPosition(q_desired);
 
 	// create a loop timer
@@ -177,7 +192,7 @@ int main() {
 			joint_task->updateTaskModel(pose_task->getTaskAndPreviousNullspace());
 			command_torques = pose_task->computeTorques() + joint_task->computeTorques();
 
-			cout << command_torques.transpose() << endl;
+			//cout << command_torques.transpose() << endl;
 		} else {
 			// No goal, stay at zero
 			cout << "NO GOAL" << endl;
@@ -195,6 +210,12 @@ int main() {
 		Matrix3d rot_in_link;
         rot_in_link << 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0;
 		redis_client.setEigen(ROBOT_EE_ORI, robot->rotation(control_link, rot_in_link));
+
+		// print current position
+		VectorXd q_cur = robot->q();
+		q_cur *= 180.0/M_PI;
+		cout << q_cur.transpose() << endl;
+		
 	}
 
 	timer.stop();
