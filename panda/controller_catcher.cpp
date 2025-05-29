@@ -141,7 +141,12 @@ int main() {
 	VectorXd q_desired(dof);
 	//q_desired.head(7) << -30.0, -15.0, -15.0, -105.0, 0.0, 90.0, 45.0;
 	//q_desired.head(7) << 130.0, 45.0, 160.0, -140.0, -45.0, 140.0 -45.0;
-	q_desired.head(7) << -60.0, 0.0, -15.0, -100.0, 0.0, 100.0 -60.0;
+
+	//q_desired.head(7) << -60.0, 0.0, -15.0, -100.0, 0.0, 100.0 -60.0; // Zone center, tucked in
+	//q_desired.head(7) << -65.0, -15.0, -20.0, -130.0, 0.0, 150.0 -80.0; // Zone center, tucked out
+	q_desired.head(7) << -70.0, -30.0, -20.0, -155.0, -15.0, 165.0, -80.0; // Zone center, tucked joint 3
+
+	//q_desired.head(7) << -60.0, -15.0, -30.0, -110.0, -15.0, 125.0 -90.0; // Zone top left, tucked out
 	q_desired.head(7) *= M_PI / 180.0;
 	//q_desired.head(7) = robot->q();
 	joint_task->setGoalPosition(q_desired);

@@ -18,11 +18,19 @@ CUTOFF_INITIAL = 4.0
 JUMPER_CUTOFF = 2.5 # Where it starts actually moving arm
 SCALING_CUTOFF = 2.5 # When to stop scaling
 
-STOP_CUTOFF = 0.25 # Where it starts assuming ball has been caught
+STOP_CUTOFF = 0.25 #0.5 # Where it starts assuming ball has been caught
 
 BASE_CLIPPER = -0.5 # Where to switch lowest z clip limit so as not to hit base
 
-init_position = np.array([0.1, -0.50, 0.5]) # Where to put net center at start
+#init_position = np.array([0.1, -0.50, 0.5]) # Where to put net center at start
+#init_position = np.array([0.1, -0.50, 0.3]) 
+
+#init_position = np.array([0.1, -0.525, 0.375]) # Zone center
+
+#init_position = np.array([0.1, -0.6, 0.47]) # Zone top left
+init_position = np.array([0.1, -0.65, 0.47])
+
+
 #init_orientation = np.array([[1.0,0,0],[0,-1.0,0],[0,0,-1.0]])
 init_orientation = np.array([[1.0, 0.0, 0.0], [0.0, -np.sqrt(2)/2, -np.sqrt(2)/2], [0.0, np.sqrt(2)/2, -np.sqrt(2)/2]])
 
@@ -453,6 +461,12 @@ first_time = 0.0
 
 print_counter = 0.0
 
+# Safety_timeout
+SAFETY_STOP_TIME = 2.5 # seconds
+
+safety_timer = time.time()
+check_safety = time.time()
+
 try:
   print("...Starting...")
 
@@ -480,7 +494,10 @@ try:
     if state == State.INIT:
 
         # Ensure got to intial position
+        safety_timer = time.time()
+        check_safety = time.time()
         print("Initializing...")
+
         #if pos_error < 1e-1 and ori_error < 1e-1:
         if pos_error < 1e-1:
             goal_position = init_position
@@ -509,7 +526,7 @@ try:
             if (current_ball_position[0] < CUTOFF_INITIAL):
 
                 # Check if ball past catchable position
-                if (current_ball_position[0] < STOP_CUTOFF):
+                if ( (current_ball_position[0] < STOP_CUTOFF) or ((check_safety - safety_timer) > SAFETY_STOP_TIME ) ):
                     state = State.FINISH # Stop updating, just move to catch position and stop
 
                     print(f"FINAL ESTIMATED CATCH POINT: {goal_position}")
@@ -519,8 +536,12 @@ try:
 
                     tracking_list = [] # Clear polynomial lists
                     time_list = []
-                else:
 
+                    # Print timer fail
+                    if ((check_safety - safety_timer) > SAFETY_STOP_TIME ):
+                        print("@@@@@@TIMEOUT@@@@@@")
+
+                else:
                     """ KALMAN APPROACH """
                     # Kalman update
                     if firstFlag:
@@ -531,7 +552,11 @@ try:
 
                         initial_state_estimate = np.concatenate([current_ball_position, estimated_init_velo])
                         velKF.x = np.array(initial_state_estimate)
+
+                        safety_timer = time.time() # Start safety timer
                     else:
+
+                        check_safety = time.time() # Safety timer
                         t_cur = time.time()
                         
                         if (np.linalg.norm(current_ball_position - pos_prev) > 1e-6): # Only if pos is new
@@ -690,6 +715,9 @@ try:
                     #     #     state = State.CATCH
             else:
                print(f"Ball BEFORE line at: {current_ball_position}")
+
+               safety_timer = time.time()
+               check_safety = time.time()
        
 
     elif state == State.CATCH:
@@ -724,6 +752,10 @@ try:
                 # Reset Kalman
                 velKF.x = kf_init_estimate
                 velKF.P = np.eye(6)
+
+                # Reset safety timer
+                safety_timer = time.time()
+                check_safety = time.time()
 
                 state = State.INIT
 
