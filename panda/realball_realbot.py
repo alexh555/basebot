@@ -15,7 +15,7 @@ DEG_TO_RAD = math.pi / 180.0
 NUM_POINTS_EST = 3
 CUTOFF_INITIAL = 4.0
 
-JUMPER_CUTOFF = 2.5 # Where it starts actually moving arm
+JUMPER_CUTOFF = 2.5 #2.5 # Where it starts actually moving arm
 SCALING_CUTOFF = 2.5 # When to stop scaling
 
 STOP_CUTOFF = 0.25 #0.5 # Where it starts assuming ball has been caught
@@ -244,7 +244,7 @@ def closed_form_catchpoint(pbi, vbi, xf = 0.1):
         lower_pos_bound = np.array([-0.1, -0.9, 0.2])
         upper_pos_bound = np.array([0.25, -0.1, 1.1 ])
 
-    if current_position[2] <= 0.2:
+    if ((current_position[2] <= 0.2) and (current_position[1] <= -0.75)): # Secondary clipping on outside edge
         lower_pos_bound = np.array([-0.1, -0.75, 0.0])
 
     current_position = np.clip(current_position, lower_pos_bound, upper_pos_bound)
@@ -461,6 +461,8 @@ first_time = 0.0
 
 print_counter = 0.0
 
+data_counter = 0.0
+
 # Safety_timeout
 SAFETY_STOP_TIME = 2.5 # seconds
 
@@ -527,12 +529,17 @@ try:
 
                 # Check if ball past catchable position
                 if ( (current_ball_position[0] < STOP_CUTOFF) or ((check_safety - safety_timer) > SAFETY_STOP_TIME ) ):
+
+
                     state = State.FINISH # Stop updating, just move to catch position and stop
 
                     print(f"FINAL ESTIMATED CATCH POINT: {goal_position}")
+                    print(f"Final Kalman Velocity: {current_ball_velocity}")
+                    print(f"N_data = {data_counter}")
                     if (goal_position[2] <= 0.2) or (goal_position[1] <= -0.9):
                         print('OUTSIDE OF WORKSPACE')
                     print_counter = 0.0
+                    data_counter = 0.0
 
                     tracking_list = [] # Clear polynomial lists
                     time_list = []
@@ -554,6 +561,8 @@ try:
                         velKF.x = np.array(initial_state_estimate)
 
                         safety_timer = time.time() # Start safety timer
+
+                        data_counter = data_counter + 1 # Track data
                     else:
 
                         check_safety = time.time() # Safety timer
@@ -606,11 +615,12 @@ try:
                             # goal_orientation = new_orientation
 
                             # *** CUTOFF SCALING ***
-                            # if current_position[0] < JUMPER_CUTOFF:
+                            # if current_position[0] < JUMPER_CUTOFF: # ONLY start updating robot after cutoff
                             #     goal_position = new_position
                             #     goal_orientation = new_orientation
-                            #     #goal_orientation = align_x_to_world(current_orientation)
-                            #     #print(f"NEW GOAL POS: {goal_position}")
+                            # # else:
+                            # #     goal_position = init_position
+                            # #     goal_orientation = init_orientation
 
                             # *** NO SCALING ***
                             goal_position = new_position
@@ -619,6 +629,8 @@ try:
                             # Update previous
                             t_prev = t_cur
                             pos_prev = current_ball_position
+
+                            data_counter = data_counter + 1
 
                     """ VELOCITY APPROACH """
                     # if firstFlag:
