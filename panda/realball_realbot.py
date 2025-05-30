@@ -751,7 +751,7 @@ try:
 
                 # Reset Kalman
                 velKF.x = kf_init_estimate
-                velKF.P = np.eye(6)
+                velKF.P = np.diag([1e-2, 1e-2, 1e-2, 1.0, 1.0, 1.0]) #*= 1.0 # Low in pos, high in vel = confident in pos, not in velo
 
                 # Reset safety timer
                 safety_timer = time.time()
